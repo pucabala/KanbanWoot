@@ -1,4 +1,4 @@
-# 🧩 Kanbanwoot
+# 🧩 KanbanWoot
 
 Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos personalizados do tipo lista para visualizar e mover contatos entre etapas diretamente na interface.
 
