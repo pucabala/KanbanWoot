@@ -2,10 +2,31 @@
 import { debugLog } from './debug';
 import React, { useEffect, useState } from 'react';
 
-// Configurações da API do Chatwoot vindas do window._env_ (injetadas pelo .env.js)
-const CHATWOOT_URL = (window._env_ && window._env_.REACT_APP_CHATWOOT_URL) || '';
-const ACCOUNT_ID = (window._env_ && window._env_.REACT_APP_CHATWOOT_ACCOUNT_ID) || '';
-const TOKEN = (window._env_ && window._env_.REACT_APP_CHATWOOT_TOKEN) || '';
+// Funções utilitárias para cookie
+export function setCookie(name, value, days = 365) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/';
+}
+export function getCookie(name) {
+  return document.cookie.split('; ').reduce((r, v) => {
+    const parts = v.split('=');
+    return parts[0] === name ? decodeURIComponent(parts[1]) : r;
+  }, '');
+}
+
+// Função para obter parâmetro de conexão (cookie tem prioridade, depois .env, mas se vazio ou nulo, retorna '')
+export function getConnectionParam(key, envKey) {
+  const cookieVal = getCookie(key);
+  if (cookieVal && cookieVal !== '""' && cookieVal !== '') return cookieVal;
+  const envVal = (window._env_ && window._env_[envKey]) || '';
+  if (envVal && envVal !== '""' && envVal !== '') return envVal;
+  return '';
+}
+
+// Configurações da API do Chatwoot vindas do cookie OU do window._env_
+const CHATWOOT_URL = getConnectionParam('chatwoot_url', 'REACT_APP_CHATWOOT_URL');
+const ACCOUNT_ID = getConnectionParam('chatwoot_account_id', 'REACT_APP_CHATWOOT_ACCOUNT_ID');
+const TOKEN = getConnectionParam('chatwoot_token', 'REACT_APP_CHATWOOT_TOKEN');
 
 const chatwootHeaders = {
   'Content-Type': 'application/json',
@@ -103,18 +124,6 @@ export async function updateContactCustomAttribute(contactId, attributeKey, valu
     debugLog('Erro ao atualizar atributo customizado:', error);
     throw error;
   }
-}
-
-// Funções utilitárias para cookie
-export function setCookie(name, value, days = 365) {
-  const expires = new Date(Date.now() + days * 864e5).toUTCString();
-  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/';
-}
-export function getCookie(name) {
-  return document.cookie.split('; ').reduce((r, v) => {
-    const parts = v.split('=');
-    return parts[0] === name ? decodeURIComponent(parts[1]) : r;
-  }, '');
 }
 
 // Função utilitária para debug visual dos parâmetros de conexão
