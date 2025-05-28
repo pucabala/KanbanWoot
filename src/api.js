@@ -116,3 +116,13 @@ export function getCookie(name) {
     return parts[0] === name ? decodeURIComponent(parts[1]) : r;
   }, '');
 }
+
+// Função utilitária para debug visual dos parâmetros de conexão
+export function showConnectionDebug() {
+  const url = getCookie('chatwoot_url') || (window._env_ && window._env_.REACT_APP_CHATWOOT_URL);
+  const accountId = getCookie('chatwoot_account_id') || (window._env_ && window._env_.REACT_APP_CHATWOOT_ACCOUNT_ID);
+  const token = getCookie('chatwoot_token') || (window._env_ && window._env_.REACT_APP_CHATWOOT_TOKEN);
+  // Mostra no console e também pode ser usado em UI
+  debugLog('[DEBUG] Parâmetros de conexão:', { url, accountId, token });
+  return { url, accountId, token };
+}
