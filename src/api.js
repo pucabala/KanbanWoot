@@ -1,5 +1,6 @@
 //api.js
 import { debugLog } from './debug';
+import React, { useEffect, useState } from 'react';
 
 // Configurações da API do Chatwoot vindas do window._env_ (injetadas pelo .env.js)
 const CHATWOOT_URL = (window._env_ && window._env_.REACT_APP_CHATWOOT_URL) || '';
@@ -102,4 +103,16 @@ export async function updateContactCustomAttribute(contactId, attributeKey, valu
     debugLog('Erro ao atualizar atributo customizado:', error);
     throw error;
   }
+}
+
+// Funções utilitárias para cookie
+function setCookie(name, value, days = 365) {
+  const expires = new Date(Date.now() + days * 864e5).toUTCString();
+  document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/';
+}
+function getCookie(name) {
+  return document.cookie.split('; ').reduce((r, v) => {
+    const parts = v.split('=');
+    return parts[0] === name ? decodeURIComponent(parts[1]) : r;
+  }, '');
 }

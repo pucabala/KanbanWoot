@@ -2,8 +2,18 @@
 import React from 'react';
 import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
 import KanbanBoard from './components/KanbanBoard';
+import ChatwootConfigForm from './components/ChatwootConfigForm';
 
 export default function App() {
+  // Checa se está configurado
+  const isConfigured = Boolean(
+    (document.cookie.includes('chatwoot_url') && document.cookie.includes('chatwoot_account_id') && document.cookie.includes('chatwoot_token'))
+  );
+
+  if (!isConfigured) {
+    return <ChatwootConfigForm />;
+  }
+
   return (
     <Router>
       <div className="app-container">
