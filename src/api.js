@@ -106,11 +106,11 @@ export async function updateContactCustomAttribute(contactId, attributeKey, valu
 }
 
 // Funções utilitárias para cookie
-function setCookie(name, value, days = 365) {
+export function setCookie(name, value, days = 365) {
   const expires = new Date(Date.now() + days * 864e5).toUTCString();
   document.cookie = name + '=' + encodeURIComponent(value) + '; expires=' + expires + '; path=/';
 }
-function getCookie(name) {
+export function getCookie(name) {
   return document.cookie.split('; ').reduce((r, v) => {
     const parts = v.split('=');
     return parts[0] === name ? decodeURIComponent(parts[1]) : r;
