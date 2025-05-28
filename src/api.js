@@ -14,10 +14,20 @@ export function getCookie(name) {
   }, '');
 }
 
-// Função para obter parâmetro de conexão (cookie tem prioridade, depois .env, mas se vazio ou nulo, retorna '')
+// Função para obter parâmetro de conexão (prioridade: querystring > cookie > env.js)
 export function getConnectionParam(key, envKey) {
+  // 1. Querystring
+  const params = new URLSearchParams(window.location.search);
+  const qsVal = params.get(key);
+  if (qsVal && qsVal !== '""' && qsVal !== '') {
+    // Se veio pela querystring, sobrescreve o cookie
+    setCookie(key, qsVal);
+    return qsVal;
+  }
+  // 2. Cookie
   const cookieVal = getCookie(key);
   if (cookieVal && cookieVal !== '""' && cookieVal !== '') return cookieVal;
+  // 3. .env.js
   const envVal = (window._env_ && window._env_[envKey]) || '';
   if (envVal && envVal !== '""' && envVal !== '') return envVal;
   return '';
