@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import { DragDropContext } from '@hello-pangea/dnd';
 import { getContacts, updateKanbanStage, getKanbanStages, getListAttributes } from '../api';
 import { debugLog } from '../debug';
+import KanbanColumn from './KanbanColumn';
 
 function KanbanBoard() {
   const [columns, setColumns] = useState({});
@@ -57,6 +58,22 @@ function KanbanBoard() {
     fetchData();
   }, [selectedAttr]);
 
+  // Compute attrDisplayNames for the selected attribute (values to display names)
+  const attrDisplayNames = React.useMemo(() => {
+    const attr = listAttributes.find(a => a.attribute_key === selectedAttr);
+    if (!attr) return {};
+    // If attribute_values is an array of strings, use them as both key and value
+    if (Array.isArray(attr.attribute_values)) {
+      const map = {};
+      attr.attribute_values.forEach(val => {
+        map[val] = val;
+      });
+      map['Não Atribuído'] = 'Não Atribuído';
+      return map;
+    }
+    return {};
+  }, [listAttributes, selectedAttr]);
+
   const onDragEnd = async ({ source, destination }) => {
     debugLog('DragEnd', { source, destination });
     if (!destination) return;
@@ -106,32 +123,12 @@ function KanbanBoard() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-6 p-6 overflow-x-auto bg-gray-50 min-h-screen">
           {stages.map(stage => (
-            <Droppable key={stage} droppableId={stage}>
-              {(provided) => (
-                <div
-                  className="bg-gray-100 p-4 rounded w-80 min-h-[300px]"
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                >
-                  <h2 className="text-lg font-bold mb-2">{stage}</h2>
-                  {columns[stage]?.map((contact, index) => (
-                    <Draggable key={contact.id} draggableId={String(contact.id)} index={index}>
-                      {(provided) => (
-                        <div
-                          className="bg-white p-3 mb-2 rounded shadow"
-                          ref={provided.innerRef}
-                          {...provided.draggableProps}
-                          {...provided.dragHandleProps}
-                        >
-                          {contact.name || contact.email || `Contato #${contact.id}`}
-                        </div>
-                      )}
-                    </Draggable>
-                  ))}
-                  {provided.placeholder}
-                </div>
-              )}
-            </Droppable>
+            <KanbanColumn
+              key={stage}
+              stage={stage}
+              contacts={columns[stage] || []}
+              attrDisplayNames={attrDisplayNames}
+            />
           ))}
         </div>
       </DragDropContext>
