@@ -80,12 +80,22 @@ async function chatwootFetch(endpoint, options = {}) {
 
 debugLog('api.js: módulo carregado');
 
-// Retorna todos os contatos
+// Retorna todos os contatos (busca todas as páginas)
 export async function getContacts() {
   debugLog('api.js: getContacts chamado');
+  let allContacts = [];
+  let page = 1;
+  let hasMore = true;
   try {
-    const data = await chatwootFetch('/contacts');
-    return data.payload || [];
+    while (hasMore) {
+      const data = await chatwootFetch(`/contacts?page=${page}`);
+      const contacts = data.payload || [];
+      allContacts = allContacts.concat(contacts);
+      // Se vier menos de 20, provavelmente acabou (Chatwoot padrão de paginação)
+      hasMore = Array.isArray(contacts) && contacts.length === 20;
+      page++;
+    }
+    return allContacts;
   } catch (error) {
     debugLog('Erro ao buscar contatos:', error);
     throw error;
