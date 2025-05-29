@@ -146,6 +146,14 @@ export async function updateContactCustomAttribute(contactId, attributeKey, valu
   }
 }
 
+// Atualiza o estágio do Kanban de um contato (wrapper para updateContactCustomAttribute)
+export async function updateKanbanStage(contactId, stage, attributeKey) {
+  debugLog('api.js: updateKanbanStage chamado', contactId, stage, attributeKey);
+  // Usa 'kanban' como padrão se não informado
+  const key = attributeKey || 'kanban';
+  return updateContactCustomAttribute(contactId, key, stage);
+}
+
 // Retorna os estágios do Kanban (valores do atributo customizado do tipo 'list')
 // Se passado um parâmetro, usa o atributo correspondente; senão, usa o primeiro do tipo 'list'
 export async function getKanbanStages(attributeKey) {
@@ -165,6 +173,18 @@ export async function getKanbanStages(attributeKey) {
     return ['Não definido'];
   } catch (error) {
     debugLog('Erro ao buscar estágios do Kanban:', error);
+    throw error;
+  }
+}
+
+// Retorna todos os atributos customizados do tipo lista (para dropdown de seleção de funil)
+export async function getListAttributes() {
+  debugLog('api.js: getListAttributes chamado');
+  try {
+    const attrs = await getCustomAttributes();
+    return attrs.filter(a => a.attribute_display_type === 'list' && Array.isArray(a.attribute_values));
+  } catch (error) {
+    debugLog('Erro ao buscar atributos do tipo lista:', error);
     throw error;
   }
 }
