@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
 import { getContacts, updateKanbanStage, getKanbanStages, getListAttributes } from '../api';
 import { debugLog } from '../debug';
@@ -10,6 +10,11 @@ function KanbanBoard() {
   const [loading, setLoading] = useState(true);
   const [listAttributes, setListAttributes] = useState([]);
   const [selectedAttr, setSelectedAttr] = useState('');
+  const [contacts, setContacts] = useState([]); // todos os contatos carregados
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const loaderRef = useRef(null);
 
   useEffect(() => {
     // Carrega atributos do tipo lista para o dropdown
@@ -19,44 +24,73 @@ function KanbanBoard() {
     });
   }, []);
 
+  // Carrega estágios e reseta contatos ao trocar de funil
   useEffect(() => {
     if (!selectedAttr) return;
+    setContacts([]);
+    setPage(1);
+    setHasMore(true);
+    setLoading(true);
     debugLog('KanbanBoard montado');
-    const fetchData = async () => {
-      try {
-        debugLog('Buscando estágios e contatos...');
-        const [kanbanStages, contacts] = await Promise.all([
-          getKanbanStages(selectedAttr),
-          getContacts()
-        ]);
-        setStages(kanbanStages);
-
-        debugLog('Estágios:', kanbanStages, 'Contatos:', contacts);
-
-        const organized = kanbanStages.reduce((acc, stage) => {
-          acc[stage] = [];
-          return acc;
-        }, {});
-
-        contacts.forEach(contact => {
-          const stage = contact.custom_attributes?.[selectedAttr];
-          const col = stage && kanbanStages.includes(stage) ? stage : 'Não Atribuído';
-          if (!organized[col]) organized[col] = [];
-          organized[col].push(contact);
-        });
-
-        setColumns(organized);
-        setLoading(false);
-      } catch (err) {
-        debugLog('Erro ao buscar dados do Kanban:', err);
-        setLoading(false);
-        setStages([]);
-        setColumns({});
-        alert('Erro ao carregar dados do Kanban. Veja o console para detalhes.');
-      }
-    };
-    fetchData();
+    getKanbanStages(selectedAttr).then(kanbanStages => {
+      setStages(kanbanStages);
+      setLoading(false);
+    });
   }, [selectedAttr]);
+
+  // Carrega contatos incrementalmente
+  useEffect(() => {
+    if (!selectedAttr || !hasMore) return;
+    setLoadingMore(true);
+    getContacts(page).then(newContacts => {
+      if (newContacts.length === 0) {
+        setHasMore(false);
+      } else {
+        setContacts(prev => {
+          // Evita duplicatas
+          const ids = new Set(prev.map(c => c.id));
+          return [...prev, ...newContacts.filter(c => !ids.has(c.id))];
+        });
+        setPage(p => p + 1);
+      }
+      setLoadingMore(false);
+    });
+  }, [page, selectedAttr]);
+
+  // Organiza contatos em colunas sempre que contatos ou estágios mudam
+  useEffect(() => {
+    if (!stages.length) return;
+    const organized = stages.reduce((acc, stage) => {
+      acc[stage] = [];
+      return acc;
+    }, {});
+    contacts.forEach(contact => {
+      const stage = contact.custom_attributes?.[selectedAttr];
+      const col = stage && stages.includes(stage) ? stage : 'Não Atribuído';
+      if (!organized[col]) organized[col] = [];
+      organized[col].push(contact);
+    });
+    setColumns(organized);
+  }, [contacts, stages, selectedAttr]);
+
+  // Infinite scroll com IntersectionObserver
+  useEffect(() => {
+    if (!hasMore || loadingMore) return;
+    const observer = new window.IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          setPage(p => p + 1);
+        }
+      },
+      { root: null, rootMargin: '0px', threshold: 1.0 }
+    );
+    if (loaderRef.current) {
+      observer.observe(loaderRef.current);
+    }
+    return () => {
+      if (loaderRef.current) observer.unobserve(loaderRef.current);
+    };
+  }, [hasMore, loadingMore]);
 
   // Compute attrDisplayNames for the selected attribute (values to display names)
   const attrDisplayNames = React.useMemo(() => {
@@ -100,7 +134,7 @@ function KanbanBoard() {
     }
   };
 
-  if (loading) {
+  if (loading && contacts.length === 0) {
     return <div className="p-4">Carregando Kanban...</div>;
   }
 
@@ -130,7 +164,12 @@ function KanbanBoard() {
               attrDisplayNames={attrDisplayNames}
             />
           ))}
+          {/* Loader sentinel para IntersectionObserver */}
+          {hasMore && <div ref={loaderRef} style={{ minWidth: 40, minHeight: 40 }} />}
         </div>
+        {loadingMore && (
+          <div className="w-full text-center py-4 text-gray-500">Carregando mais contatos...</div>
+        )}
       </DragDropContext>
     </>
   );

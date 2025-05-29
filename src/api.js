@@ -80,26 +80,14 @@ async function chatwootFetch(endpoint, options = {}) {
 
 debugLog('api.js: módulo carregado');
 
-// Retorna todos os contatos (busca todas as páginas)
-export async function getContacts() {
-  debugLog('api.js: getContacts chamado');
-  let allContacts = [];
-  let page = 1;
-  let hasMore = true;
+// Retorna uma página de contatos (default page=1)
+export async function getContacts(page = 1) {
+  debugLog('api.js: getContacts chamado', page);
   try {
-    while (hasMore) {
-      const data = await chatwootFetch(`/contacts?page=${page}`); // remove per_page
-      const contacts = data.payload || [];
-      debugLog(`Página ${page} retornou ${contacts.length} contatos`);
-      allContacts = allContacts.concat(contacts);
-      // Se não vieram contatos, acabou
-      if (!contacts.length) {
-        hasMore = false;
-      } else {
-        page++;
-      }
-    }
-    return allContacts;
+    const data = await chatwootFetch(`/contacts?page=${page}`);
+    const contacts = data.payload || [];
+    debugLog(`Página ${page} retornou ${contacts.length} contatos`);
+    return contacts;
   } catch (error) {
     debugLog('Erro ao buscar contatos:', error);
     throw error;
