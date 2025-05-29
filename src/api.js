@@ -94,6 +94,33 @@ export async function getContacts(page = 1) {
   }
 }
 
+// Busca contatos filtrando pelo atributo 'kanbanwoot' (checkbox marcado)
+export async function getContactsFiltered(page = 1) {
+  debugLog('api.js: getContactsFiltered chamado', page);
+  try {
+    const data = await chatwootFetch(`/contacts/filter`, {
+      method: 'POST',
+      body: JSON.stringify({
+        page,
+        payload: [
+          {
+            attribute_key: 'kanbanwoot',
+            filter_operator: 'equal_to',
+            values: [true],
+            query_operator: null
+          }
+        ]
+      })
+    });
+    const contacts = data.payload || [];
+    debugLog(`Filtro kanbanwoot: página ${page} retornou ${contacts.length} contatos`);
+    return contacts;
+  } catch (error) {
+    debugLog('Erro ao buscar contatos filtrados:', error);
+    throw error;
+  }
+}
+
 // Retorna todos os atributos customizados (lista) apenas do tipo contact_attribute
 export async function getCustomAttributes() {
   debugLog('api.js: getCustomAttributes chamado');

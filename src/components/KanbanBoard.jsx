@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
-import { getContacts, updateKanbanStage, getKanbanStages, getListAttributes } from '../api';
+import { getContactsFiltered, updateKanbanStage, getKanbanStages, getListAttributes } from '../api';
 import { debugLog } from '../debug';
 import KanbanColumn from './KanbanColumn';
 
@@ -38,11 +38,11 @@ function KanbanBoard() {
     });
   }, [selectedAttr]);
 
-  // Carrega contatos incrementalmente
+  // Carrega contatos incrementalmente (apenas os com kanbanwoot marcado)
   useEffect(() => {
     if (!selectedAttr || !hasMore) return;
     setLoadingMore(true);
-    getContacts(page).then(newContacts => {
+    getContactsFiltered(page).then(newContacts => {
       if (newContacts.length === 0) {
         setHasMore(false);
       } else {
