@@ -14,22 +14,52 @@ export function getCookie(name) {
   }, '');
 }
 
+// Validação básica de parâmetros
+function isValidAccountId(val) {
+  return /^\d+$/.test(val);
+}
+function isValidToken(val) {
+  return typeof val === 'string' && val.length > 10 && !/\s/.test(val);
+}
+function isValidUrl(val) {
+  try {
+    new URL(val);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Função para obter parâmetro de conexão (prioridade: querystring > cookie > env.js)
 export function getConnectionParam(key, envKey) {
   // 1. Querystring
   const params = new URLSearchParams(window.location.search);
   const qsVal = params.get(key);
   if (qsVal && qsVal !== '""' && qsVal !== '') {
+    // Validação
+    if (key === 'chatwoot_account_id' && !isValidAccountId(qsVal)) return '';
+    if (key === 'chatwoot_token' && !isValidToken(qsVal)) return '';
+    if (key === 'chatwoot_url' && !isValidUrl(qsVal)) return '';
     // Se veio pela querystring, sobrescreve o cookie
     setCookie(key, qsVal);
     return qsVal;
   }
   // 2. Cookie
   const cookieVal = getCookie(key);
-  if (cookieVal && cookieVal !== '""' && cookieVal !== '') return cookieVal;
+  if (cookieVal && cookieVal !== '""' && cookieVal !== '') {
+    if (key === 'chatwoot_account_id' && !isValidAccountId(cookieVal)) return '';
+    if (key === 'chatwoot_token' && !isValidToken(cookieVal)) return '';
+    if (key === 'chatwoot_url' && !isValidUrl(cookieVal)) return '';
+    return cookieVal;
+  }
   // 3. .env.js
   const envVal = (window._env_ && window._env_[envKey]) || '';
-  if (envVal && envVal !== '""' && envVal !== '') return envVal;
+  if (envVal && envVal !== '""' && envVal !== '') {
+    if (key === 'chatwoot_account_id' && !isValidAccountId(envVal)) return '';
+    if (key === 'chatwoot_token' && !isValidToken(envVal)) return '';
+    if (key === 'chatwoot_url' && !isValidUrl(envVal)) return '';
+    return envVal;
+  }
   return '';
 }
 
