@@ -86,15 +86,18 @@ export async function getContacts() {
   let allContacts = [];
   let page = 1;
   let hasMore = true;
-  const perPage = 50; // valor alto para garantir todos os contatos em menos requisições
   try {
     while (hasMore) {
-      const data = await chatwootFetch(`/contacts?page=${page}&per_page=${perPage}`);
+      const data = await chatwootFetch(`/contacts?page=${page}`); // remove per_page
       const contacts = data.payload || [];
       debugLog(`Página ${page} retornou ${contacts.length} contatos`);
       allContacts = allContacts.concat(contacts);
-      hasMore = Array.isArray(contacts) && contacts.length === perPage;
-      page++;
+      // Se não vieram contatos, acabou
+      if (!contacts.length) {
+        hasMore = false;
+      } else {
+        page++;
+      }
     }
     return allContacts;
   } catch (error) {
