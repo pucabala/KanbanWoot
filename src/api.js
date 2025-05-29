@@ -86,13 +86,14 @@ export async function getContacts() {
   let allContacts = [];
   let page = 1;
   let hasMore = true;
+  const perPage = 50; // valor alto para garantir todos os contatos em menos requisições
   try {
     while (hasMore) {
-      const data = await chatwootFetch(`/contacts?page=${page}`);
+      const data = await chatwootFetch(`/contacts?page=${page}&per_page=${perPage}`);
       const contacts = data.payload || [];
+      debugLog(`Página ${page} retornou ${contacts.length} contatos`);
       allContacts = allContacts.concat(contacts);
-      // Se vier menos de 20, provavelmente acabou (Chatwoot padrão de paginação)
-      hasMore = Array.isArray(contacts) && contacts.length === 20;
+      hasMore = Array.isArray(contacts) && contacts.length === perPage;
       page++;
     }
     return allContacts;
@@ -167,10 +168,15 @@ export async function getKanbanStages(attributeKey) {
     if (!attr) {
       attr = attrs.find(a => a.attribute_display_type === 'list' && Array.isArray(a.attribute_values));
     }
+    let stages = [];
     if (attr && Array.isArray(attr.attribute_values)) {
-      return attr.attribute_values;
+      stages = attr.attribute_values;
     }
-    return ['Não definido'];
+    // Sempre adiciona a coluna 'Não Atribuído' ao final
+    if (!stages.includes('Não Atribuído')) {
+      stages = [...stages, 'Não Atribuído'];
+    }
+    return stages.length ? stages : ['Não Atribuído'];
   } catch (error) {
     debugLog('Erro ao buscar estágios do Kanban:', error);
     throw error;
