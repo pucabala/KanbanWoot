@@ -146,21 +146,23 @@ export async function updateContactCustomAttribute(contactId, attributeKey, valu
   }
 }
 
-// Retorna os estágios do Kanban (valores do atributo customizado 'kanban')
-export async function getKanbanStages() {
-  debugLog('api.js: getKanbanStages chamado');
+// Retorna os estágios do Kanban (valores do atributo customizado do tipo 'list')
+// Se passado um parâmetro, usa o atributo correspondente; senão, usa o primeiro do tipo 'list'
+export async function getKanbanStages(attributeKey) {
+  debugLog('api.js: getKanbanStages chamado', attributeKey);
   try {
     const attrs = await getCustomAttributes();
-    // Procura o atributo do tipo lista chamado 'kanban'
-    const kanbanAttr = attrs.find(a => a.attribute_key === 'kanban' && a.attribute_display_type === 'list');
-    if (kanbanAttr && Array.isArray(kanbanAttr.attribute_values)) {
-      return kanbanAttr.attribute_values;
+    let attr;
+    if (attributeKey) {
+      attr = attrs.find(a => a.attribute_key === attributeKey && a.attribute_display_type === 'list');
     }
-    // Fallback: retorna todos os valores de todos atributos do tipo lista
-    const allStages = attrs
-      .filter(a => a.attribute_display_type === 'list' && Array.isArray(a.attribute_values))
-      .flatMap(a => a.attribute_values);
-    return allStages.length ? allStages : ['Não definido'];
+    if (!attr) {
+      attr = attrs.find(a => a.attribute_display_type === 'list' && Array.isArray(a.attribute_values));
+    }
+    if (attr && Array.isArray(attr.attribute_values)) {
+      return attr.attribute_values;
+    }
+    return ['Não definido'];
   } catch (error) {
     debugLog('Erro ao buscar estágios do Kanban:', error);
     throw error;
