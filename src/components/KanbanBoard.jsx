@@ -76,7 +76,7 @@ function KanbanBoard() {
     setColumns(updatedColumns);
 
     try {
-      await updateKanbanStage(moved.id, destination.droppableId);
+      await updateKanbanStage(moved.id, destination.droppableId, selectedAttr);
     } catch (err) {
       setColumns(prevColumns);
       alert("Erro ao atualizar estágio no Chatwoot.");
