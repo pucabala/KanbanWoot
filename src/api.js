@@ -146,6 +146,27 @@ export async function updateContactCustomAttribute(contactId, attributeKey, valu
   }
 }
 
+// Retorna os estágios do Kanban (valores do atributo customizado 'kanban')
+export async function getKanbanStages() {
+  debugLog('api.js: getKanbanStages chamado');
+  try {
+    const attrs = await getCustomAttributes();
+    // Procura o atributo do tipo lista chamado 'kanban'
+    const kanbanAttr = attrs.find(a => a.attribute_key === 'kanban' && a.attribute_display_type === 'list');
+    if (kanbanAttr && Array.isArray(kanbanAttr.attribute_values)) {
+      return kanbanAttr.attribute_values;
+    }
+    // Fallback: retorna todos os valores de todos atributos do tipo lista
+    const allStages = attrs
+      .filter(a => a.attribute_display_type === 'list' && Array.isArray(a.attribute_values))
+      .flatMap(a => a.attribute_values);
+    return allStages.length ? allStages : ['Não definido'];
+  } catch (error) {
+    debugLog('Erro ao buscar estágios do Kanban:', error);
+    throw error;
+  }
+}
+
 // Função utilitária para debug visual dos parâmetros de conexão
 export function showConnectionDebug() {
   const url = getCookie('chatwoot_url') || (window._env_ && window._env_.REACT_APP_CHATWOOT_URL);
