@@ -175,10 +175,14 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
         });
       }
     }
-    // Adiciona query_operator apenas se houver mais de um filtro
-    if (filters.length > 1) {
-      for (let i = 0; i < filters.length - 1; i++) {
-        filters[i].query_operator = 'AND';
+    // Adiciona query_operator conforme documentação da API
+    if (filters.length > 0) {
+      for (let i = 0; i < filters.length; i++) {
+        if (i < filters.length - 1) {
+          filters[i].query_operator = 'AND';
+        } else {
+          filters[i].query_operator = null;
+        }
       }
     }
     let contacts = [];
