@@ -127,19 +127,27 @@ export async function getContacts(page = 1) {
 // Guarda em memória se existe o atributo kanbanwoot
 let hasKanbanwootGlobal = null;
 
+// Função para checar e inicializar o flag global (chamada uma vez no início)
+export async function checkKanbanwootExists() {
+  if (hasKanbanwootGlobal === null) {
+    try {
+      const attrs = await getCustomAttributes();
+      hasKanbanwootGlobal = attrs.some(a => a.attribute_key === 'kanbanwoot');
+      debugLog('[Kanban] kanbanwoot existe?', hasKanbanwootGlobal);
+    } catch { hasKanbanwootGlobal = false; }
+  }
+  return hasKanbanwootGlobal;
+}
+
 export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey, stage) {
   debugLog('api.js: getContactsFiltered chamado', { page, pageSize, attributeKey, stage });
   try {
-    // Monta o filtro principal por atributo/coluna
+    // Garante que o flag global foi inicializado
+    await checkKanbanwootExists();
     let filters = [];
-    // Filtro kanbanwoot: true, se existir
-    if (hasKanbanwootGlobal === null) {
-      try {
-        const attrs = await getCustomAttributes();
-        hasKanbanwootGlobal = attrs.some(a => a.attribute_key === 'kanbanwoot');
-      } catch { hasKanbanwootGlobal = false; }
-    }
-    if (hasKanbanwootGlobal) {
+    // Se for busca global (sem filtro de coluna), aplica filtro kanbanwoot se existir
+    const isBuscaGlobal = typeof stage === 'undefined';
+    if (hasKanbanwootGlobal && isBuscaGlobal) {
       filters.push({
         attribute_key: 'kanbanwoot',
         filter_operator: 'equal_to',
@@ -148,7 +156,7 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
       });
     }
     // Filtro por valor do atributo selecionado (coluna)
-    if (attributeKey) {
+    if (attributeKey && !isBuscaGlobal) {
       if (stage === null) {
         // Coluna "Não Atribuído": contatos sem valor definido
         filters.push({
