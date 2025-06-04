@@ -126,7 +126,7 @@ export async function getContacts(page = 1) {
 
 // Busca contatos filtrando pelo atributo 'kanbanwoot' (checkbox marcado)
 export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey, stage) {
-  debugLog('api.js: getContactsFiltered chamado', page);
+  debugLog('api.js: getContactsFiltered chamado', { page, pageSize, attributeKey, stage });
   try {
     let contacts = [];
     let erroFiltragem = false;
@@ -148,26 +148,27 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
         })
       });
       contacts = data.payload || [];
-      debugLog(`Filtro kanbanwoot: página ${page} retornou ${contacts.length} contatos`);
+      debugLog(`[Kanban] Filtro kanbanwoot: página ${page} retornou ${contacts.length} contatos`);
     } catch (err) {
-      // Se erro 422, ignora e busca todos
       if (err.status === 422) {
         erroFiltragem = true;
-        debugLog('Erro 422 na filtragem, buscando todos os contatos');
+        debugLog('[Kanban] Filtro kanbanwoot não disponível (erro 422). Isso é esperado se o atributo não existe. Fallback para buscar todos os contatos.');
       } else {
+        debugLog('[Kanban] Erro inesperado ao filtrar contatos:', err);
         throw err;
       }
     }
-    // Se não houver nenhum contato com kanbanwoot true, ou erro 422, busca todos
     if (contacts.length === 0 || erroFiltragem) {
-      debugLog('Nenhum contato com kanbanwoot=true ou erro 422, buscando todos os contatos');
+      debugLog('[Kanban] Executando fallback: buscando todos os contatos (sem filtro kanbanwoot).');
       const allData = await chatwootFetch(`/contacts?page=${page}&per_page=${pageSize}`);
       contacts = allData.payload || [];
+      debugLog(`[Kanban] Fallback: página ${page} retornou ${contacts.length} contatos (total: ${allData.meta?.count ?? 'desconhecido'})`);
       return { payload: contacts, meta: allData.meta || { count: contacts.length, current_page: page } };
     }
+    debugLog(`[Kanban] Filtro aplicado com sucesso: página ${page} retornou ${contacts.length} contatos (total: ${data.meta?.count ?? 'desconhecido'})`);
     return { payload: contacts, meta: data.meta || { count: contacts.length, current_page: page } };
   } catch (error) {
-    debugLog('Erro ao buscar contatos filtrados:', error);
+    debugLog('[Kanban] Erro fatal ao buscar contatos filtrados:', error);
     throw error;
   }
 }
