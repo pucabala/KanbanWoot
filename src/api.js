@@ -185,6 +185,7 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
     let erroFiltragem = false;
     let data = null;
     try {
+      debugLog('[Kanban] Filtros enviados para a API:', JSON.stringify(filters, null, 2));
       data = await chatwootFetch(`/contacts/filter`, {
         method: 'POST',
         body: JSON.stringify({
