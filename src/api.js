@@ -158,12 +158,14 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
     if (attributeKey && !isBuscaGlobal) {
       if (stage === null) {
         // Coluna "Não Atribuído": contatos sem valor definido
-        // API não suporta is_null, então buscamos todos e filtramos no frontend
-        // Adiciona um marcador especial para filtrar depois
+        // Busca todos os valores possíveis do atributo para o filtro not_equal_to
+        const attrs = await getCustomAttributes();
+        const attr = attrs.find(a => a.attribute_key === attributeKey && Array.isArray(a.attribute_values));
+        const allValues = attr ? attr.attribute_values : [];
         filters.push({
           attribute_key: attributeKey,
           filter_operator: 'not_equal_to',
-          values: [] // será tratado no frontend
+          values: allValues
         });
       } else {
         filters.push({
