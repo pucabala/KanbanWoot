@@ -124,10 +124,48 @@ export async function getContacts(page = 1) {
   }
 }
 
-// Busca contatos filtrando pelo atributo 'kanbanwoot' (checkbox marcado)
+// Guarda em memória se existe o atributo kanbanwoot
+let hasKanbanwootGlobal = null;
+
 export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey, stage) {
   debugLog('api.js: getContactsFiltered chamado', { page, pageSize, attributeKey, stage });
   try {
+    // Monta o filtro principal por atributo/coluna
+    let filters = [];
+    // Filtro kanbanwoot: true, se existir
+    if (hasKanbanwootGlobal === null) {
+      try {
+        const attrs = await getCustomAttributes();
+        hasKanbanwootGlobal = attrs.some(a => a.attribute_key === 'kanbanwoot');
+      } catch { hasKanbanwootGlobal = false; }
+    }
+    if (hasKanbanwootGlobal) {
+      filters.push({
+        attribute_key: 'kanbanwoot',
+        filter_operator: 'equal_to',
+        values: [true],
+        query_operator: null
+      });
+    }
+    // Filtro por valor do atributo selecionado (coluna)
+    if (attributeKey) {
+      if (stage === null) {
+        // Coluna "Não Atribuído": contatos sem valor definido
+        filters.push({
+          attribute_key: attributeKey,
+          filter_operator: 'is_null',
+          values: [],
+          query_operator: null
+        });
+      } else {
+        filters.push({
+          attribute_key: attributeKey,
+          filter_operator: 'equal_to',
+          values: [stage],
+          query_operator: null
+        });
+      }
+    }
     let contacts = [];
     let erroFiltragem = false;
     let data = null;
@@ -137,35 +175,27 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
         body: JSON.stringify({
           page,
           per_page: pageSize,
-          payload: [
-            {
-              attribute_key: 'kanbanwoot',
-              filter_operator: 'equal_to',
-              values: [true],
-              query_operator: null
-            }
-          ]
+          payload: filters
         })
       });
       contacts = data.payload || [];
-      debugLog(`[Kanban] Filtro kanbanwoot: página ${page} retornou ${contacts.length} contatos`);
+      debugLog(`[Kanban] Filtro aplicado: página ${page} retornou ${contacts.length} contatos`);
     } catch (err) {
       if (err.status === 422) {
         erroFiltragem = true;
-        debugLog('[Kanban] Filtro kanbanwoot não disponível (erro 422). Isso é esperado se o atributo não existe. Fallback para buscar todos os contatos.');
+        debugLog('[Kanban] Filtro não disponível (erro 422). Fallback para buscar todos os contatos.');
       } else {
         debugLog('[Kanban] Erro inesperado ao filtrar contatos:', err);
         throw err;
       }
     }
     if (contacts.length === 0 || erroFiltragem) {
-      debugLog('[Kanban] Executando fallback: buscando todos os contatos (sem filtro kanbanwoot).');
+      debugLog('[Kanban] Executando fallback: buscando todos os contatos (sem filtro).');
       const allData = await chatwootFetch(`/contacts?page=${page}&per_page=${pageSize}`);
       contacts = allData.payload || [];
       debugLog(`[Kanban] Fallback: página ${page} retornou ${contacts.length} contatos (total: ${allData.meta?.count ?? 'desconhecido'})`);
       return { payload: contacts, meta: allData.meta || { count: contacts.length, current_page: page } };
     }
-    debugLog(`[Kanban] Filtro aplicado com sucesso: página ${page} retornou ${contacts.length} contatos (total: ${data.meta?.count ?? 'desconhecido'})`);
     return { payload: contacts, meta: data.meta || { count: contacts.length, current_page: page } };
   } catch (error) {
     debugLog('[Kanban] Erro fatal ao buscar contatos filtrados:', error);

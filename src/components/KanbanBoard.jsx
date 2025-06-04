@@ -43,10 +43,41 @@ function KanbanBoard() {
     });
   }, [selectedAttr]);
 
-  // Função para buscar contatos de uma coluna/página
+  // Função para buscar contatos de uma página (sem filtro de coluna)
+  const fetchContactsPage = useCallback(async (page) => {
+    setLoading(true);
+    const data = await getContactsFiltered(page, 15, selectedAttr);
+    setContacts(prev => ([...prev, ...(data.payload || [])]));
+    setMetaByStage(prev => ({ ...prev, all: data.meta || { count: (prev.all?.count || 0), current_page: page } }));
+    setLoading(false);
+  }, [selectedAttr]);
+
+  // Handler para carregar mais contatos globais
+  const handleLoadMore = useCallback(() => {
+    if ((contacts.length || 0) < (metaByStage.all?.count || 999999)) {
+      const nextPage = (metaByStage.all?.current_page || 1) + 1;
+      fetchContactsPage(nextPage);
+    }
+  }, [contacts, metaByStage, fetchContactsPage]);
+
+  // Carrega a primeira página ao montar
+  useEffect(() => {
+    setContacts([]);
+    setMetaByStage({});
+    fetchContactsPage(1);
+  }, [selectedAttr, fetchContactsPage]);
+
+  // Função utilitária para buscar contatos de uma coluna/página (lógica de dados separada)
+  async function fetchContactsForStage({ page, selectedAttr, stage }) {
+    // Para "Não Atribuído", buscar contatos sem valor definido para o atributo
+    const isUnassigned = stage === 'Não Atribuído';
+    return getContactsFiltered(page, 15, selectedAttr, isUnassigned ? null : stage);
+  }
+
+  // Função para buscar contatos de uma coluna/página (chama utilitária)
   const fetchStagePage = useCallback(async (stage, page) => {
     setLoadingMoreByStage(prev => ({ ...prev, [stage]: true }));
-    const data = await getContactsFiltered(page, 15, selectedAttr, stage);
+    const data = await fetchContactsForStage({ page, selectedAttr, stage });
     setContactsCache(prev => ({
       ...prev,
       [stage]: [...(prev[stage] || []), ...(data.payload || [])]
@@ -57,7 +88,7 @@ function KanbanBoard() {
     }));
     setHasMoreByStage(prev => ({
       ...prev,
-      [stage]: (data.payload?.length === 15) && ((prev[stage]?.count || 0) > ((prev[stage]?.current_page || 1) * 15))
+      [stage]: (data.payload?.length === 15) && ((data.meta?.count || 0) > ((data.meta?.current_page || 1) * 15))
     }));
     setLoadingMoreByStage(prev => ({ ...prev, [stage]: false }));
   }, [selectedAttr]);
@@ -160,7 +191,7 @@ function KanbanBoard() {
             <KanbanColumn
               key={stage}
               stage={stage}
-              contacts={columns[stage] || []}
+              contacts={contactsCache[stage] || []}
               attrDisplayNames={attrDisplayNames}
               onLoadMore={() => handleLoadMoreInColumn(stage)}
               hasMore={hasMoreByStage[stage]}
