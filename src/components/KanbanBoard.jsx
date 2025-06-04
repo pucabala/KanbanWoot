@@ -43,14 +43,14 @@ function KanbanBoard() {
     if (!selectedAttr || !hasMore) return;
     setLoadingMore(true);
     getContactsFiltered(page).then(newContacts => {
-      if (newContacts.length === 0) {
+      setContacts(prev => {
+        // Evita duplicatas
+        const ids = new Set(prev.map(c => c.id));
+        return [...prev, ...newContacts.filter(c => !ids.has(c.id))];
+      });
+      // Se vier menos de 20 contatos (padrão da API) ou nenhum, não há mais páginas
+      if (newContacts.length < 20) {
         setHasMore(false);
-      } else {
-        setContacts(prev => {
-          // Evita duplicatas
-          const ids = new Set(prev.map(c => c.id));
-          return [...prev, ...newContacts.filter(c => !ids.has(c.id))];
-        });
       }
       setLoadingMore(false);
     });
