@@ -40,7 +40,7 @@ function KanbanBoard() {
 
   // Carrega contatos incrementalmente (apenas os com kanbanwoot marcado)
   useEffect(() => {
-    if (!selectedAttr || !hasMore) return;
+    if (!selectedAttr || !hasMore || loadingMore) return;
     setLoadingMore(true);
     getContactsFiltered(page).then(newContacts => {
       setContacts(prev => {
@@ -48,8 +48,8 @@ function KanbanBoard() {
         const ids = new Set(prev.map(c => c.id));
         return [...prev, ...newContacts.filter(c => !ids.has(c.id))];
       });
-      // Se vier menos de 20 contatos (padrão da API) ou nenhum, não há mais páginas
-      if (newContacts.length < 20) {
+      // Se vier menos de 15 contatos (padrão da API Chatwoot), não há mais páginas
+      if (newContacts.length < 15) {
         setHasMore(false);
       }
       setLoadingMore(false);
@@ -78,6 +78,7 @@ function KanbanBoard() {
     const observer = new window.IntersectionObserver(
       entries => {
         if (entries[0].isIntersecting) {
+          // Só incrementa se não estiver carregando
           setPage(p => p + 1);
         }
       },
@@ -89,7 +90,7 @@ function KanbanBoard() {
     return () => {
       if (loaderRef.current) observer.unobserve(loaderRef.current);
     };
-  }, [hasMore, loadingMore]);
+  }, [hasMore, loadingMore, loaderRef.current]);
 
   // Compute attrDisplayNames for the selected attribute (values to display names)
   const attrDisplayNames = React.useMemo(() => {
