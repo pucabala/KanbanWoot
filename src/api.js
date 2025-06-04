@@ -194,10 +194,6 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
         })
       });
       contacts = data.payload || [];
-      // Se for coluna "Não Atribuído", filtra manualmente os contatos sem o atributo
-      if (attributeKey && !isBuscaGlobal && stage === null) {
-        contacts = contacts.filter(c => !c.custom_attributes || !c.custom_attributes[attributeKey]);
-      }
       debugLog(`[Kanban] Filtro aplicado: página ${page} retornou ${contacts.length} contatos`);
     } catch (err) {
       if (err.status === 422) {
