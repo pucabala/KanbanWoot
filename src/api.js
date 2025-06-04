@@ -158,13 +158,13 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
     if (attributeKey && !isBuscaGlobal) {
       if (stage === null) {
         // Coluna "Não Atribuído": contatos sem valor definido
-        // Busca todos os valores possíveis do atributo para o filtro not_equal_to
+        // Busca todos os valores possíveis do atributo para o filtro does_not_contain
         const attrs = await getCustomAttributes();
         const attr = attrs.find(a => a.attribute_key === attributeKey && Array.isArray(a.attribute_values));
         const allValues = attr ? attr.attribute_values : [];
         filters.push({
           attribute_key: attributeKey,
-          filter_operator: 'not_equal_to',
+          filter_operator: 'does_not_contain',
           values: allValues
         });
       } else {
@@ -222,9 +222,19 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
   }
 }
 
-// Retorna todos os atributos customizados (lista) apenas do tipo contact_attribute
-export async function getCustomAttributes() {
-  debugLog('api.js: getCustomAttributes chamado');
+// Guarda em memória os atributos customizados para evitar múltiplas requisições
+if (!window._kanbanwoot_customAttributesCache) {
+  window._kanbanwoot_customAttributesCache = {
+    data: null
+  };
+}
+
+export async function getCustomAttributes(forceRefresh = false) {
+  debugLog('api.js: getCustomAttributes chamado', { forceRefresh });
+  const cache = window._kanbanwoot_customAttributesCache;
+  if (!forceRefresh && cache.data) {
+    return cache.data;
+  }
   try {
     // Busca todos os atributos customizados
     const data = await chatwootFetch('/custom_attribute_definitions');
@@ -233,6 +243,7 @@ export async function getCustomAttributes() {
     const filtered = Array.isArray(all)
       ? all.filter(attr => attr.attribute_model === 'contact_attribute')
       : [];
+    cache.data = filtered;
     return filtered;
   } catch (error) {
     debugLog('Erro ao buscar atributos customizados:', error);
