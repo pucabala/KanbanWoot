@@ -152,7 +152,6 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
         attribute_key: 'kanbanwoot',
         filter_operator: 'equal_to',
         values: [true]
-        // query_operator removido
       });
     }
     // Filtro por valor do atributo selecionado (coluna)
@@ -163,15 +162,19 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
           attribute_key: attributeKey,
           filter_operator: 'is_null',
           values: []
-          // query_operator removido
         });
       } else {
         filters.push({
           attribute_key: attributeKey,
           filter_operator: 'equal_to',
           values: [stage]
-          // query_operator removido
         });
+      }
+    }
+    // Adiciona query_operator apenas se houver mais de um filtro
+    if (filters.length > 1) {
+      for (let i = 0; i < filters.length - 1; i++) {
+        filters[i].query_operator = 'AND';
       }
     }
     let contacts = [];
