@@ -69,9 +69,12 @@ function KanbanBoard() {
 
   // Função utilitária para buscar contatos de uma coluna/página (lógica de dados separada)
   async function fetchContactsForStage({ page, selectedAttr, stage }) {
+    debugLog('[KanbanBoard] fetchContactsForStage', { page, selectedAttr, stage });
     // Para "Não Atribuído", buscar contatos sem valor definido para o atributo
     const isUnassigned = stage === 'Não Atribuído';
-    return getContactsFiltered(page, 15, selectedAttr, isUnassigned ? null : stage);
+    const result = await getContactsFiltered(page, 15, selectedAttr, isUnassigned ? null : stage);
+    debugLog('[KanbanBoard] Resultado getContactsFiltered', { page, selectedAttr, stage, result });
+    return result;
   }
 
   // Função para buscar contatos de uma coluna/página (chama utilitária)
@@ -187,17 +190,27 @@ function KanbanBoard() {
       </div>
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-6 p-6 overflow-x-auto bg-gray-50 min-h-screen">
-          {stages.map(stage => (
-            <KanbanColumn
-              key={stage}
-              stage={stage}
-              contacts={(contactsCache[stage] || []).slice(0, visibleByStage[stage] || INCREMENT)}
-              attrDisplayNames={attrDisplayNames}
-              onLoadMore={() => handleLoadMoreInColumn(stage)}
-              hasMore={hasMoreByStage[stage]}
-              loadingMore={loadingMoreByStage[stage]}
-            />
-          ))}
+          {stages.map(stage => {
+            debugLog('[KanbanBoard] Renderizando coluna', {
+              stage,
+              contacts: contactsCache[stage],
+              visible: visibleByStage[stage],
+              meta: metaByStage[stage],
+              hasMore: hasMoreByStage[stage],
+              loadingMore: loadingMoreByStage[stage]
+            });
+            return (
+              <KanbanColumn
+                key={stage}
+                stage={stage}
+                contacts={(contactsCache[stage] || []).slice(0, visibleByStage[stage] || INCREMENT)}
+                attrDisplayNames={attrDisplayNames}
+                onLoadMore={() => handleLoadMoreInColumn(stage)}
+                hasMore={hasMoreByStage[stage]}
+                loadingMore={loadingMoreByStage[stage]}
+              />
+            );
+          })}
         </div>
       </DragDropContext>
     </>
