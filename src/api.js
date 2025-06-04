@@ -160,8 +160,8 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
         // Coluna "Não Atribuído": contatos sem valor definido
         filters.push({
           attribute_key: attributeKey,
-          filter_operator: 'is_null',
-          values: []
+          filter_operator: 'is_null'
+          // NÃO envie o campo values para is_null
         });
       } else {
         filters.push({
