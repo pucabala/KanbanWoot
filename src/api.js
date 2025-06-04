@@ -128,25 +128,37 @@ export async function getContacts(page = 1) {
 export async function getContactsFiltered(page = 1) {
   debugLog('api.js: getContactsFiltered chamado', page);
   try {
-    const data = await chatwootFetch(`/contacts/filter`, {
-      method: 'POST',
-      body: JSON.stringify({
-        page,
-        payload: [
-          {
-            attribute_key: 'kanbanwoot',
-            filter_operator: 'equal_to',
-            values: [true],
-            query_operator: null
-          }
-        ]
-      })
-    });
-    let contacts = data.payload || [];
-    debugLog(`Filtro kanbanwoot: página ${page} retornou ${contacts.length} contatos`);
-    // Se não houver nenhum contato com kanbanwoot true, busca todos
-    if (contacts.length === 0) {
-      debugLog('Nenhum contato com kanbanwoot=true, buscando todos os contatos');
+    let contacts = [];
+    let erroFiltragem = false;
+    try {
+      const data = await chatwootFetch(`/contacts/filter`, {
+        method: 'POST',
+        body: JSON.stringify({
+          page,
+          payload: [
+            {
+              attribute_key: 'kanbanwoot',
+              filter_operator: 'equal_to',
+              values: [true],
+              query_operator: null
+            }
+          ]
+        })
+      });
+      contacts = data.payload || [];
+      debugLog(`Filtro kanbanwoot: página ${page} retornou ${contacts.length} contatos`);
+    } catch (err) {
+      // Se erro 422, ignora e busca todos
+      if (err.status === 422) {
+        erroFiltragem = true;
+        debugLog('Erro 422 na filtragem, buscando todos os contatos');
+      } else {
+        throw err;
+      }
+    }
+    // Se não houver nenhum contato com kanbanwoot true, ou erro 422, busca todos
+    if (contacts.length === 0 || erroFiltragem) {
+      debugLog('Nenhum contato com kanbanwoot=true ou erro 422, buscando todos os contatos');
       const allData = await chatwootFetch(`/contacts?page=${page}`);
       contacts = allData.payload || [];
     }
