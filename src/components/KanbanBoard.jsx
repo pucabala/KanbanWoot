@@ -77,18 +77,18 @@ function KanbanBoard() {
     if (!hasMore || loadingMore) return;
     const observer = new window.IntersectionObserver(
       entries => {
-        if (entries[0].isIntersecting) {
-          // Só incrementa se não estiver carregando
+        if (entries[0].isIntersecting && !loadingMore) {
           setPage(p => p + 1);
         }
       },
-      { root: null, rootMargin: '0px', threshold: 1.0 }
+      { root: null, rootMargin: '0px', threshold: 0.1 }
     );
-    if (loaderRef.current) {
-      observer.observe(loaderRef.current);
+    const currentLoader = loaderRef.current;
+    if (currentLoader) {
+      observer.observe(currentLoader);
     }
     return () => {
-      if (loaderRef.current) observer.unobserve(loaderRef.current);
+      if (currentLoader) observer.unobserve(currentLoader);
     };
   }, [hasMore, loadingMore, loaderRef.current]);
 
