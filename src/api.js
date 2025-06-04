@@ -130,8 +130,9 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
   try {
     let contacts = [];
     let erroFiltragem = false;
+    let data = null;
     try {
-      const data = await chatwootFetch(`/contacts/filter`, {
+      data = await chatwootFetch(`/contacts/filter`, {
         method: 'POST',
         body: JSON.stringify({
           page,
