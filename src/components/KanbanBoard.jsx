@@ -191,7 +191,7 @@ function KanbanBoard() {
             <KanbanColumn
               key={stage}
               stage={stage}
-              contacts={contactsCache[stage] || []}
+              contacts={(contactsCache[stage] || []).slice(0, visibleByStage[stage] || INCREMENT)}
               attrDisplayNames={attrDisplayNames}
               onLoadMore={() => handleLoadMoreInColumn(stage)}
               hasMore={hasMoreByStage[stage]}
