@@ -7,7 +7,7 @@ import ChatwootConfigForm from './components/ChatwootConfigForm';
 export default function App() {
   // Checa se está configurado
   const isConfigured = Boolean(
-    (document.cookie.includes('chatwoot_url') && document.cookie.includes('chatwoot_account_id') && document.cookie.includes('chatwoot_token'))
+    (document.cookie.includes('url') && document.cookie.includes('account_id') && document.cookie.includes('token'))
   );
 
   if (!isConfigured) {

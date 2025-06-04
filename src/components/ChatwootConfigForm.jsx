@@ -29,17 +29,20 @@ export default function ChatwootConfigForm({ onConfigured }) {
 
   function handleSave(e) {
     e.preventDefault();
-    setCookie('chatwoot_url', url);
-    setCookie('chatwoot_account_id', accountId);
-    setCookie('chatwoot_token', token);
+    setCookie('url', url);
+    setCookie('account_id', accountId);
+    setCookie('token', token);
     if (onConfigured) onConfigured();
     window.location.reload();
   }
 
   useEffect(() => {
-    setUrl(getCookie('chatwoot_url'));
-    setAccountId(getCookie('chatwoot_account_id'));
-    setToken(getCookie('chatwoot_token'));
+    // Usa getConnectionParam do api.js para garantir prioridade e validação
+    import('../api').then(({ getConnectionParam }) => {
+      setUrl(getConnectionParam('url', 'REACT_APP_CHATWOOT_URL'));
+      setAccountId(getConnectionParam('account_id', 'REACT_APP_CHATWOOT_ACCOUNT_ID'));
+      setToken(getConnectionParam('token', 'REACT_APP_CHATWOOT_TOKEN'));
+    });
   }, []);
 
   return (

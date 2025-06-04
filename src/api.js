@@ -37,9 +37,9 @@ export function getConnectionParam(key, envKey) {
   const qsVal = params.get(key);
   if (qsVal && qsVal !== '""' && qsVal !== '') {
     // Validação
-    if (key === 'chatwoot_account_id' && !isValidAccountId(qsVal)) return '';
-    if (key === 'chatwoot_token' && !isValidToken(qsVal)) return '';
-    if (key === 'chatwoot_url' && !isValidUrl(qsVal)) return '';
+    if (key === 'account_id' && !isValidAccountId(qsVal)) return '';
+    if (key === 'token' && !isValidToken(qsVal)) return '';
+    if (key === 'url' && !isValidUrl(qsVal)) return '';
     // Se veio pela querystring, sobrescreve o cookie
     setCookie(key, qsVal);
     return qsVal;
@@ -47,26 +47,26 @@ export function getConnectionParam(key, envKey) {
   // 2. Cookie
   const cookieVal = getCookie(key);
   if (cookieVal && cookieVal !== '""' && cookieVal !== '') {
-    if (key === 'chatwoot_account_id' && !isValidAccountId(cookieVal)) return '';
-    if (key === 'chatwoot_token' && !isValidToken(cookieVal)) return '';
-    if (key === 'chatwoot_url' && !isValidUrl(cookieVal)) return '';
+    if (key === 'account_id' && !isValidAccountId(cookieVal)) return '';
+    if (key === 'token' && !isValidToken(cookieVal)) return '';
+    if (key === 'url' && !isValidUrl(cookieVal)) return '';
     return cookieVal;
   }
   // 3. .env.js
   const envVal = (window._env_ && window._env_[envKey]) || '';
   if (envVal && envVal !== '""' && envVal !== '') {
-    if (key === 'chatwoot_account_id' && !isValidAccountId(envVal)) return '';
-    if (key === 'chatwoot_token' && !isValidToken(envVal)) return '';
-    if (key === 'chatwoot_url' && !isValidUrl(envVal)) return '';
+    if (key === 'account_id' && !isValidAccountId(envVal)) return '';
+    if (key === 'token' && !isValidToken(envVal)) return '';
+    if (key === 'url' && !isValidUrl(envVal)) return '';
     return envVal;
   }
   return '';
 }
 
 // Configurações da API do Chatwoot vindas do cookie OU do window._env_
-const CHATWOOT_URL = getConnectionParam('chatwoot_url', 'REACT_APP_CHATWOOT_URL');
-const ACCOUNT_ID = getConnectionParam('chatwoot_account_id', 'REACT_APP_CHATWOOT_ACCOUNT_ID');
-const TOKEN = getConnectionParam('chatwoot_token', 'REACT_APP_CHATWOOT_TOKEN');
+const CHATWOOT_URL = getConnectionParam('url', 'REACT_APP_CHATWOOT_URL');
+const ACCOUNT_ID = getConnectionParam('account_id', 'REACT_APP_CHATWOOT_ACCOUNT_ID');
+const TOKEN = getConnectionParam('token', 'REACT_APP_CHATWOOT_TOKEN');
 
 const chatwootHeaders = {
   'Content-Type': 'application/json',
@@ -245,9 +245,9 @@ export async function getListAttributes() {
 
 // Função utilitária para debug visual dos parâmetros de conexão
 export function showConnectionDebug() {
-  const url = getCookie('chatwoot_url') || (window._env_ && window._env_.REACT_APP_CHATWOOT_URL);
-  const accountId = getCookie('chatwoot_account_id') || (window._env_ && window._env_.REACT_APP_CHATWOOT_ACCOUNT_ID);
-  const token = getCookie('chatwoot_token') || (window._env_ && window._env_.REACT_APP_CHATWOOT_TOKEN);
+  const url = getCookie('url') || (window._env_ && window._env_.REACT_APP_CHATWOOT_URL);
+  const accountId = getCookie('account_id') || (window._env_ && window._env_.REACT_APP_CHATWOOT_ACCOUNT_ID);
+  const token = getCookie('token') || (window._env_ && window._env_.REACT_APP_CHATWOOT_TOKEN);
   // Mostra no console e também pode ser usado em UI
   debugLog('[DEBUG] Parâmetros de conexão:', { url, accountId, token });
   return { url, accountId, token };
