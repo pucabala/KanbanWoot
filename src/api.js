@@ -157,14 +157,8 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
     // Filtro por valor do atributo selecionado (coluna)
     if (attributeKey && !isBuscaGlobal) {
       if (stage === null) {
-        // Coluna "Não Atribuído": contatos sem valor definido
-        // API não suporta is_null, então buscamos todos e filtramos no frontend
-        // Adiciona um marcador especial para filtrar depois
-        filters.push({
-          attribute_key: attributeKey,
-          filter_operator: 'not_equal_to',
-          values: [] // será tratado no frontend
-        });
+        // Coluna "Não Atribuído": NÃO adiciona filtro para o atributo, filtra manualmente depois
+        // Não adiciona nada ao filters
       } else {
         filters.push({
           attribute_key: attributeKey,
