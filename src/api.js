@@ -125,7 +125,7 @@ export async function getContacts(page = 1) {
 }
 
 // Busca contatos filtrando pelo atributo 'kanbanwoot' (checkbox marcado)
-export async function getContactsFiltered(page = 1, pageSize = 15) {
+export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey, stage) {
   debugLog('api.js: getContactsFiltered chamado', page);
   try {
     let contacts = [];
@@ -162,8 +162,9 @@ export async function getContactsFiltered(page = 1, pageSize = 15) {
       debugLog('Nenhum contato com kanbanwoot=true ou erro 422, buscando todos os contatos');
       const allData = await chatwootFetch(`/contacts?page=${page}&per_page=${pageSize}`);
       contacts = allData.payload || [];
+      return { payload: contacts, meta: allData.meta || { count: contacts.length, current_page: page } };
     }
-    return contacts;
+    return { payload: contacts, meta: data.meta || { count: contacts.length, current_page: page } };
   } catch (error) {
     debugLog('Erro ao buscar contatos filtrados:', error);
     throw error;

@@ -11,14 +11,13 @@ function KanbanBoard() {
   const [listAttributes, setListAttributes] = useState([]);
   const [selectedAttr, setSelectedAttr] = useState('');
   const [contacts, setContacts] = useState([]); // todos os contatos carregados
-  const [contactsCache, setContactsCache] = useState([]); // cache global
-  const [visibleByStage, setVisibleByStage] = useState({}); // quantos mostrar por coluna
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const loaderRef = useRef(null);
-  const PAGE_SIZE = 100; // tamanho do lote para cache
-  const INCREMENT = 15; // quantos mostrar por vez por coluna
+  const [contactsCache, setContactsCache] = useState({}); // {stage: [contatos]}
+  const [visibleByStage, setVisibleByStage] = useState({}); // {stage: quantos mostrar}
+  const [pageByStage, setPageByStage] = useState({}); // {stage: pagina atual}
+  const [hasMoreByStage, setHasMoreByStage] = useState({}); // {stage: boolean}
+  const [metaByStage, setMetaByStage] = useState({}); // {stage: {count, current_page}}
+  const [loadingMoreByStage, setLoadingMoreByStage] = useState({}); // {stage: boolean}
+  const INCREMENT = 15;
 
   useEffect(() => {
     // Carrega atributos do tipo lista para o dropdown
@@ -28,14 +27,14 @@ function KanbanBoard() {
     });
   }, []);
 
-  // Carrega estágios e reseta contatos ao trocar de funil
+  // Carrega estágios e reseta tudo ao trocar de funil
   useEffect(() => {
     if (!selectedAttr) return;
-    setContacts([]);
-    setContactsCache([]);
+    setContactsCache({});
     setVisibleByStage({});
-    setPage(1);
-    setHasMore(true);
+    setPageByStage({});
+    setHasMoreByStage({});
+    setMetaByStage({});
     setLoading(true);
     debugLog('KanbanBoard montado');
     getKanbanStages(selectedAttr).then(kanbanStages => {
@@ -44,72 +43,54 @@ function KanbanBoard() {
     });
   }, [selectedAttr]);
 
-  // Carrega contatos em lote para o cache
+  // Função para buscar contatos de uma coluna/página
+  const fetchStagePage = useCallback(async (stage, page) => {
+    setLoadingMoreByStage(prev => ({ ...prev, [stage]: true }));
+    const data = await getContactsFiltered(page, 15, selectedAttr, stage);
+    setContactsCache(prev => ({
+      ...prev,
+      [stage]: [...(prev[stage] || []), ...(data.payload || [])]
+    }));
+    setMetaByStage(prev => ({
+      ...prev,
+      [stage]: data.meta || { count: (prev[stage]?.count || 0), current_page: page }
+    }));
+    setHasMoreByStage(prev => ({
+      ...prev,
+      [stage]: (data.payload?.length === 15) && ((prev[stage]?.count || 0) > ((prev[stage]?.current_page || 1) * 15))
+    }));
+    setLoadingMoreByStage(prev => ({ ...prev, [stage]: false }));
+  }, [selectedAttr]);
+
+  // Handler para carregar mais em uma coluna
+  const handleLoadMoreInColumn = useCallback((stage) => {
+    setVisibleByStage(prev => ({ ...prev, [stage]: (prev[stage] || INCREMENT) + INCREMENT }));
+    // Se já carregou tudo do cache, busca próxima página
+    if ((contactsCache[stage]?.length || 0) < (metaByStage[stage]?.count || 999999) && hasMoreByStage[stage]) {
+      const nextPage = (pageByStage[stage] || 1) + 1;
+      setPageByStage(prev => ({ ...prev, [stage]: nextPage }));
+      fetchStagePage(stage, nextPage);
+    }
+  }, [contactsCache, metaByStage, hasMoreByStage, pageByStage, fetchStagePage]);
+
+  // Carrega a primeira página de cada coluna ao montar
   useEffect(() => {
-    if (!selectedAttr || !hasMore || loadingMore) return;
-    setLoadingMore(true);
-    getContactsFiltered(page, PAGE_SIZE).then(newContacts => {
-      setContactsCache(prev => {
-        // Evita duplicatas
-        const ids = new Set(prev.map(c => c.id));
-        return [...prev, ...newContacts.filter(c => !ids.has(c.id))];
-      });
-      if (newContacts.length < PAGE_SIZE) {
-        setHasMore(false);
+    stages.forEach(stage => {
+      if ((contactsCache[stage]?.length || 0) === 0 && hasMoreByStage[stage]) {
+        fetchStagePage(stage, 1);
       }
-      setLoadingMore(false);
     });
-  }, [page, selectedAttr]);
+  }, [stages, fetchStagePage, contactsCache, hasMoreByStage]);
 
-  // Inicializa quantos mostrar por coluna
+  // Inicializa controles por coluna
   useEffect(() => {
     if (!stages.length) return;
-    setVisibleByStage(stages.reduce((acc, stage) => {
-      acc[stage] = INCREMENT;
-      return acc;
-    }, {}));
+    setVisibleByStage(stages.reduce((acc, stage) => { acc[stage] = INCREMENT; return acc; }, {}));
+    setPageByStage(stages.reduce((acc, stage) => { acc[stage] = 1; return acc; }, {}));
+    setHasMoreByStage(stages.reduce((acc, stage) => { acc[stage] = true; return acc; }, {}));
+    setContactsCache(stages.reduce((acc, stage) => { acc[stage] = []; return acc; }, {}));
+    setMetaByStage(stages.reduce((acc, stage) => { acc[stage] = { count: 0, current_page: 1 }; return acc; }, {}));
   }, [stages]);
-
-  // Atualiza contatos visíveis conforme cache e visibleByStage
-  useEffect(() => {
-    if (!stages.length) return;
-    const organized = stages.reduce((acc, stage) => {
-      acc[stage] = [];
-      return acc;
-    }, {});
-    contactsCache.forEach(contact => {
-      const stage = contact.custom_attributes?.[selectedAttr];
-      const col = stage && stages.includes(stage) ? stage : 'Não Atribuído';
-      if (!organized[col]) organized[col] = [];
-      organized[col].push(contact);
-    });
-    // Aplica o limite de visibilidade por coluna
-    const limited = {};
-    for (const stage of stages) {
-      limited[stage] = organized[stage]?.slice(0, visibleByStage[stage] || INCREMENT) || [];
-    }
-    setColumns(limited);
-  }, [contactsCache, stages, selectedAttr, visibleByStage]);
-
-  // Infinite scroll com IntersectionObserver
-  useEffect(() => {
-    if (!hasMore || loadingMore) return;
-    const observer = new window.IntersectionObserver(
-      entries => {
-        if (entries[0].isIntersecting && !loadingMore) {
-          setPage(p => p + 1);
-        }
-      },
-      { root: null, rootMargin: '0px', threshold: 0.1 }
-    );
-    const currentLoader = loaderRef.current;
-    if (currentLoader) {
-      observer.observe(currentLoader);
-    }
-    return () => {
-      if (currentLoader) observer.unobserve(currentLoader);
-    };
-  }, [hasMore, loadingMore, loaderRef.current]);
 
   // Compute attrDisplayNames for the selected attribute (values to display names)
   const attrDisplayNames = React.useMemo(() => {
@@ -153,19 +134,6 @@ function KanbanBoard() {
     }
   };
 
-  // Handler para carregar mais em uma coluna
-  const handleLoadMoreInColumn = useCallback((stage) => {
-    setVisibleByStage(prev => ({
-      ...prev,
-      [stage]: (prev[stage] || INCREMENT) + INCREMENT
-    }));
-    // Se o cache estiver acabando, busca mais
-    const totalVisiveis = Object.values(visibleByStage).reduce((a, b) => a + b, 0);
-    if (contactsCache.length - totalVisiveis < INCREMENT * stages.length && hasMore && !loadingMore) {
-      setPage(p => p + 1);
-    }
-  }, [contactsCache.length, hasMore, loadingMore, stages.length, visibleByStage]);
-
   if (loading && contacts.length === 0) {
     return <div className="p-4">Carregando Kanban...</div>;
   }
@@ -195,15 +163,11 @@ function KanbanBoard() {
               contacts={columns[stage] || []}
               attrDisplayNames={attrDisplayNames}
               onLoadMore={() => handleLoadMoreInColumn(stage)}
-              hasMore={columns[stage]?.length > (visibleByStage[stage] || INCREMENT)}
+              hasMore={hasMoreByStage[stage]}
+              loadingMore={loadingMoreByStage[stage]}
             />
           ))}
-          {/* Loader sentinel para IntersectionObserver */}
-          {hasMore && <div ref={loaderRef} style={{ minWidth: 40, minHeight: 40 }} />}
         </div>
-        {loadingMore && (
-          <div className="w-full text-center py-4 text-gray-500">Carregando mais contatos...</div>
-        )}
       </DragDropContext>
     </>
   );
