@@ -51,7 +51,6 @@ function KanbanBoard() {
           const ids = new Set(prev.map(c => c.id));
           return [...prev, ...newContacts.filter(c => !ids.has(c.id))];
         });
-        setPage(p => p + 1);
       }
       setLoadingMore(false);
     });
