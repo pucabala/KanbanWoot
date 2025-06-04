@@ -11,10 +11,14 @@ function KanbanBoard() {
   const [listAttributes, setListAttributes] = useState([]);
   const [selectedAttr, setSelectedAttr] = useState('');
   const [contacts, setContacts] = useState([]); // todos os contatos carregados
+  const [contactsCache, setContactsCache] = useState([]); // cache global
+  const [visibleByStage, setVisibleByStage] = useState({}); // quantos mostrar por coluna
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const loaderRef = useRef(null);
+  const PAGE_SIZE = 100; // tamanho do lote para cache
+  const INCREMENT = 15; // quantos mostrar por vez por coluna
 
   useEffect(() => {
     // Carrega atributos do tipo lista para o dropdown
@@ -28,6 +32,8 @@ function KanbanBoard() {
   useEffect(() => {
     if (!selectedAttr) return;
     setContacts([]);
+    setContactsCache([]);
+    setVisibleByStage({});
     setPage(1);
     setHasMore(true);
     setLoading(true);
@@ -38,39 +44,52 @@ function KanbanBoard() {
     });
   }, [selectedAttr]);
 
-  // Carrega contatos incrementalmente (apenas os com kanbanwoot marcado)
+  // Carrega contatos em lote para o cache
   useEffect(() => {
     if (!selectedAttr || !hasMore || loadingMore) return;
     setLoadingMore(true);
-    getContactsFiltered(page).then(newContacts => {
-      setContacts(prev => {
+    getContactsFiltered(page, PAGE_SIZE).then(newContacts => {
+      setContactsCache(prev => {
         // Evita duplicatas
         const ids = new Set(prev.map(c => c.id));
         return [...prev, ...newContacts.filter(c => !ids.has(c.id))];
       });
-      // Se vier menos de 15 contatos (padrão da API Chatwoot), não há mais páginas
-      if (newContacts.length < 15) {
+      if (newContacts.length < PAGE_SIZE) {
         setHasMore(false);
       }
       setLoadingMore(false);
     });
   }, [page, selectedAttr]);
 
-  // Organiza contatos em colunas sempre que contatos ou estágios mudam
+  // Inicializa quantos mostrar por coluna
+  useEffect(() => {
+    if (!stages.length) return;
+    setVisibleByStage(stages.reduce((acc, stage) => {
+      acc[stage] = INCREMENT;
+      return acc;
+    }, {}));
+  }, [stages]);
+
+  // Atualiza contatos visíveis conforme cache e visibleByStage
   useEffect(() => {
     if (!stages.length) return;
     const organized = stages.reduce((acc, stage) => {
       acc[stage] = [];
       return acc;
     }, {});
-    contacts.forEach(contact => {
+    contactsCache.forEach(contact => {
       const stage = contact.custom_attributes?.[selectedAttr];
       const col = stage && stages.includes(stage) ? stage : 'Não Atribuído';
       if (!organized[col]) organized[col] = [];
       organized[col].push(contact);
     });
-    setColumns(organized);
-  }, [contacts, stages, selectedAttr]);
+    // Aplica o limite de visibilidade por coluna
+    const limited = {};
+    for (const stage of stages) {
+      limited[stage] = organized[stage]?.slice(0, visibleByStage[stage] || INCREMENT) || [];
+    }
+    setColumns(limited);
+  }, [contactsCache, stages, selectedAttr, visibleByStage]);
 
   // Infinite scroll com IntersectionObserver
   useEffect(() => {
@@ -134,6 +153,19 @@ function KanbanBoard() {
     }
   };
 
+  // Handler para carregar mais em uma coluna
+  const handleLoadMoreInColumn = useCallback((stage) => {
+    setVisibleByStage(prev => ({
+      ...prev,
+      [stage]: (prev[stage] || INCREMENT) + INCREMENT
+    }));
+    // Se o cache estiver acabando, busca mais
+    const totalVisiveis = Object.values(visibleByStage).reduce((a, b) => a + b, 0);
+    if (contactsCache.length - totalVisiveis < INCREMENT * stages.length && hasMore && !loadingMore) {
+      setPage(p => p + 1);
+    }
+  }, [contactsCache.length, hasMore, loadingMore, stages.length, visibleByStage]);
+
   if (loading && contacts.length === 0) {
     return <div className="p-4">Carregando Kanban...</div>;
   }
@@ -162,6 +194,8 @@ function KanbanBoard() {
               stage={stage}
               contacts={columns[stage] || []}
               attrDisplayNames={attrDisplayNames}
+              onLoadMore={() => handleLoadMoreInColumn(stage)}
+              hasMore={columns[stage]?.length > (visibleByStage[stage] || INCREMENT)}
             />
           ))}
           {/* Loader sentinel para IntersectionObserver */}

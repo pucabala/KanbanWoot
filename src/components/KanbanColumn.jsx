@@ -9,8 +9,26 @@ import KanbanCard from './KanbanCard';
  *  contacts: Array<{ id: number | string, name: string, email?: string }>
  * }} props
  */
-export default function KanbanColumn({ stage, contacts, attrDisplayNames }) {
-  // Recebe attrDisplayNames do KanbanBoard via props (agora centralizado)
+export default function KanbanColumn({ stage, contacts, attrDisplayNames, onLoadMore, hasMore }) {
+  const loaderRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!hasMore || !onLoadMore) return;
+    const observer = new window.IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          onLoadMore();
+        }
+      },
+      { root: null, rootMargin: '0px', threshold: 0.1 }
+    );
+    const currentLoader = loaderRef.current;
+    if (currentLoader) observer.observe(currentLoader);
+    return () => {
+      if (currentLoader) observer.unobserve(currentLoader);
+    };
+  }, [hasMore, onLoadMore]);
+
   return (
     <div className="bg-white rounded shadow-md min-w-[20rem] flex flex-col">
       <h2 className="px-4 py-2 font-semibold border-b border-gray-200" id={`col-title-${stage}`}>
@@ -33,6 +51,7 @@ export default function KanbanColumn({ stage, contacts, attrDisplayNames }) {
               <KanbanCard key={contact.id} contact={contact} index={index} attrDisplayNames={attrDisplayNames} />
             ))}
             {provided.placeholder}
+            {hasMore && <div ref={loaderRef} style={{ minHeight: 40 }} />}
           </div>
         )}
       </Droppable>
