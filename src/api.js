@@ -142,8 +142,14 @@ export async function getContactsFiltered(page = 1) {
         ]
       })
     });
-    const contacts = data.payload || [];
+    let contacts = data.payload || [];
     debugLog(`Filtro kanbanwoot: página ${page} retornou ${contacts.length} contatos`);
+    // Se não houver nenhum contato com kanbanwoot true, busca todos
+    if (contacts.length === 0) {
+      debugLog('Nenhum contato com kanbanwoot=true, buscando todos os contatos');
+      const allData = await chatwootFetch(`/contacts?page=${page}`);
+      contacts = allData.payload || [];
+    }
     return contacts;
   } catch (error) {
     debugLog('Erro ao buscar contatos filtrados:', error);
@@ -210,9 +216,26 @@ export async function getKanbanStages(attributeKey) {
   try {
     const attrs = await getCustomAttributes();
     let attr;
-    if (attributeKey) {
-      attr = attrs.find(a => a.attribute_key === attributeKey && a.attribute_display_type === 'list');
+    // 1. Se kbw=nome do funil na querystring, usa ele
+    const params = new URLSearchParams(window.location.search);
+    const kbwParam = params.get('kbw');
+    if (kbwParam) {
+      attr = attrs.find(a => a.attribute_display_type === 'list' && a.attribute_key === kbwParam);
+      // Salva o kbw no cookie para persistência
+      setCookie('kbw', kbwParam);
     }
+    // 2. Se não, usa o attributeKey passado (ex: armazenado em cookie)
+    if (!attr && attributeKey) {
+      attr = attrs.find(a => a.attribute_display_type === 'list' && a.attribute_key === attributeKey);
+    }
+    // 2b. Se não, tenta pegar do cookie 'kbw'
+    if (!attr) {
+      const kbwCookie = getCookie('kbw');
+      if (kbwCookie) {
+        attr = attrs.find(a => a.attribute_display_type === 'list' && a.attribute_key === kbwCookie);
+      }
+    }
+    // 3. Se não, usa o primeiro atributo do tipo lista
     if (!attr) {
       attr = attrs.find(a => a.attribute_display_type === 'list' && Array.isArray(a.attribute_values));
     }
