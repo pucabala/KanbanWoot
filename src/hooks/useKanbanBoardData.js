@@ -27,11 +27,18 @@ export function useKanbanBoardData() {
     setStages([]); // Limpa colunas ao trocar de atributo
     getKanbanStages(selectedAttr).then(kanbanStages => {
       setStages(kanbanStages);
+      // O carregamento de contatos será disparado pelo próximo useEffect
       setLoading(false);
     });
   }, [selectedAttr]);
 
   // Carrega todos os contatos em background e monta matriz
+  useEffect(() => {
+    if (!selectedAttr || !stages.length) return;
+    setKanbanMatrix({}); // Limpa matriz ao trocar de colunas
+    loadAllContacts();
+  }, [selectedAttr, stages, loadAllContacts]);
+
   const loadAllContacts = useCallback(async () => {
     setLoading(true);
     let allContacts = [];
@@ -65,12 +72,6 @@ export function useKanbanBoardData() {
     });
     setKanbanMatrix(matrix);
   }, []);
-
-  // Recarrega tudo ao trocar de funil ou estágios
-  useEffect(() => {
-    if (!selectedAttr || !stages.length) return;
-    loadAllContacts();
-  }, [selectedAttr, stages, loadAllContacts]);
 
   // Drag & drop: move contato na matriz local e sincroniza com API
   const moveCard = useCallback(async (contactId, fromStage, toStage) => {
