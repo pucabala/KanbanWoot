@@ -88,14 +88,22 @@ function KanbanBoard() {
       meta: data.meta,
       payload: data.payload
     });
-    // Remove contatos duplicados por id
+    // Remove contatos duplicados por id e garante que cada contato só aparece em UMA coluna
     setContactsCache(prev => {
-      const existing = prev[stage] || [];
-      const newContacts = (data.payload || []).filter(c => !existing.some(e => e.id === c.id));
-      return {
-        ...prev,
-        [stage]: [...existing, ...newContacts]
-      };
+      // Remove o contato de todas as outras colunas antes de adicionar nesta
+      const newCache = { ...prev };
+      const newContacts = (data.payload || []);
+      // Cria um set com os ids que virão nesta coluna
+      const newIds = new Set(newContacts.map(c => c.id));
+      // Remove esses ids de todas as outras colunas
+      Object.keys(newCache).forEach(col => {
+        if (col !== stage) {
+          newCache[col] = (newCache[col] || []).filter(c => !newIds.has(c.id));
+        }
+      });
+      // Adiciona os contatos desta página nesta coluna
+      newCache[stage] = [...(newCache[stage] || []), ...newContacts.filter(c => !(newCache[stage] || []).some(e => e.id === c.id))];
+      return newCache;
     });
     setMetaByStage(prev => ({
       ...prev,
