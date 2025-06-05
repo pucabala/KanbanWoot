@@ -13,10 +13,12 @@ export function useKanbanBoardData() {
 
   // Inicializa selectedAttr a partir da querystring, cookie ou valor padrão
   useEffect(() => {
+    debugLog('[KanbanDebug] useEffect getListAttributes iniciado');
     getListAttributes().then(attrs => {
+      debugLog('[KanbanDebug] Atributos carregados:', attrs);
       setListAttributes(attrs);
       if (!attrs.length) {
-        // Aviso se não houver nenhum atributo do tipo lista
+        debugLog('[KanbanDebug] Nenhum atributo do tipo lista disponível!');
         setSelectedAttr('');
         setStages([]);
         setKanbanMatrix({});
@@ -27,22 +29,26 @@ export function useKanbanBoardData() {
       // Busca valor inicial do atributo (querystring > cookie > primeiro disponível)
       let initialAttr = '';
       let kbw = getConnectionParam('kbw', 'REACT_APP_KBW_ATTR');
+      debugLog('[KanbanDebug] Valor kbw detectado:', kbw);
       if (kbw && attrs.some(a => a.attribute_key === kbw)) {
         initialAttr = kbw;
       } else {
         initialAttr = attrs[0].attribute_key;
       }
+      debugLog('[KanbanDebug] initialAttr definido:', initialAttr);
       setSelectedAttr(prev => prev || initialAttr);
     });
   }, []);
 
   // Carrega estágios ao trocar de funil
   useEffect(() => {
+    debugLog('[KanbanDebug] useEffect selectedAttr mudou:', selectedAttr);
     if (!selectedAttr) return;
     setLoading(true);
     setKanbanMatrix({}); // Limpa matriz ao trocar de atributo
     setStages([]); // Limpa colunas ao trocar de atributo
     getKanbanStages(selectedAttr).then(kanbanStages => {
+      debugLog('[KanbanDebug] Stages carregados:', kanbanStages);
       setStages(kanbanStages);
       // O carregamento de contatos será disparado pelo próximo useEffect
       setLoading(false);
@@ -51,18 +57,22 @@ export function useKanbanBoardData() {
 
   // Carrega todos os contatos em background e monta matriz
   useEffect(() => {
+    debugLog('[KanbanDebug] useEffect para carregar contatos', { selectedAttr, stages });
     if (!selectedAttr || !stages.length) return;
     setKanbanMatrix({}); // Limpa matriz ao trocar de colunas
     loadAllContacts();
   }, [selectedAttr, stages, loadAllContacts]);
 
   const loadAllContacts = useCallback(async () => {
+    debugLog('[KanbanDebug] loadAllContacts chamado', { selectedAttr, stages });
     setLoading(true);
     let allContacts = [];
     let page = 1;
     let keepGoing = true;
     while (keepGoing) {
+      debugLog(`[KanbanDebug] Buscando contatos página ${page}`);
       const { payload, meta } = await getContactsFiltered(page, 100, selectedAttr);
+      debugLog(`[KanbanDebug] Página ${page} retornou`, payload?.length, 'contatos', meta);
       allContacts = allContacts.concat(payload || []);
       if (!meta || !meta.count || allContacts.length >= meta.count) {
         keepGoing = false;
@@ -70,6 +80,7 @@ export function useKanbanBoardData() {
         page++;
       }
     }
+    debugLog('[KanbanDebug] Todos os contatos carregados:', allContacts.length);
     setContacts(allContacts);
     setLoading(false);
     // Monta matriz espelho
@@ -78,6 +89,7 @@ export function useKanbanBoardData() {
 
   // Monta matriz espelho a partir dos contatos e estágios
   const buildMatrix = useCallback((allContacts, allStages, attrKey) => {
+    debugLog('[KanbanDebug] buildMatrix chamado', { allContactsLen: allContacts.length, allStages, attrKey });
     const matrix = {};
     allStages.forEach(stage => { matrix[stage] = []; });
     allContacts.forEach(contact => {
@@ -87,11 +99,13 @@ export function useKanbanBoardData() {
       if (!matrix[col]) matrix[col] = [];
       matrix[col].push(contact);
     });
+    debugLog('[KanbanDebug] Matriz final:', matrix);
     setKanbanMatrix(matrix);
   }, []);
 
   // Drag & drop: move contato na matriz local e sincroniza com API
   const moveCard = useCallback(async (contactId, fromStage, toStage) => {
+    debugLog('[KanbanDebug] moveCard', { contactId, fromStage, toStage, selectedAttr });
     setLoadingSync(true);
     // Atualiza matriz local otimisticamente
     setKanbanMatrix(prev => {
@@ -100,6 +114,7 @@ export function useKanbanBoardData() {
       if (!contact) return prev;
       newMatrix[fromStage] = (newMatrix[fromStage] || []).filter(c => c.id !== contactId);
       newMatrix[toStage] = [ ...(newMatrix[toStage] || []), { ...contact, custom_attributes: { ...contact.custom_attributes, [selectedAttr]: toStage === 'Não Atribuído' ? undefined : toStage } } ];
+      debugLog('[KanbanDebug] Matriz após moveCard:', newMatrix);
       return newMatrix;
     });
     // Sincroniza com API
@@ -117,11 +132,13 @@ export function useKanbanBoardData() {
 
   // Nomes amigáveis dos valores
   const attrDisplayNames = (() => {
+    debugLog('[KanbanDebug] attrDisplayNames calculando', { listAttributes, selectedAttr });
     const attr = listAttributes.find(a => a.attribute_key === selectedAttr);
     if (!attr) return {};
     const map = {};
     (attr.attribute_values || []).forEach(val => { map[val] = val; });
     map['Não Atribuído'] = 'Não Atribuído';
+    debugLog('[KanbanDebug] attrDisplayNames:', map);
     return map;
   })();
 
