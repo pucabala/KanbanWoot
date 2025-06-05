@@ -85,8 +85,7 @@ export function useKanbanBoardData() {
     // Sincroniza com API
     try {
       await updateKanbanStage(contactId, toStage === 'Não Atribuído' ? undefined : toStage, selectedAttr);
-      // Após sync, recarrega todos os contatos para garantir consistência
-      await loadAllContacts();
+      // Não recarrega todos os contatos após sync
     } catch (e) {
       debugLog('Erro ao sincronizar drag & drop', e);
       // Em caso de erro, recarrega tudo para garantir consistência
