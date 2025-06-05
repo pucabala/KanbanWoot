@@ -23,6 +23,8 @@ export function useKanbanBoardData() {
   useEffect(() => {
     if (!selectedAttr) return;
     setLoading(true);
+    setKanbanMatrix({}); // Limpa matriz ao trocar de atributo
+    setStages([]); // Limpa colunas ao trocar de atributo
     getKanbanStages(selectedAttr).then(kanbanStages => {
       setStages(kanbanStages);
       setLoading(false);
