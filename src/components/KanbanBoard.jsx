@@ -81,6 +81,12 @@ function KanbanBoard() {
   const fetchStagePage = useCallback(async (stage, page) => {
     setLoadingMoreByStage(prev => ({ ...prev, [stage]: true }));
     const data = await fetchContactsForStage({ page, selectedAttr, stage });
+    debugLog('[KanbanBoard] fetchStagePage', {
+      stage,
+      page,
+      payloadLength: data.payload?.length,
+      meta: data.meta
+    });
     setContactsCache(prev => ({
       ...prev,
       [stage]: [...(prev[stage] || []), ...(data.payload || [])]
@@ -89,9 +95,10 @@ function KanbanBoard() {
       ...prev,
       [stage]: data.meta || { count: (prev[stage]?.count || 0), current_page: page }
     }));
+    // Corrige cálculo de hasMoreByStage
     setHasMoreByStage(prev => ({
       ...prev,
-      [stage]: (data.payload?.length === 15) && ((data.meta?.count || 0) > ((data.meta?.current_page || 1) * 15))
+      [stage]: (data.payload?.length > 0) && ((data.meta?.count || 0) > ((data.meta?.current_page || 1) * 15))
     }));
     setLoadingMoreByStage(prev => ({ ...prev, [stage]: false }));
   }, [selectedAttr]);
