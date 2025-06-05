@@ -47,7 +47,7 @@ export function useKanbanBoardData() {
     if (!selectedAttr) return;
     setCookie('kbw', selectedAttr); // Salva no cookie
     setLoading(true);
-    setKanbanMatrix({});
+    setKanbanMatrix({}); // Zera matriz ANTES de buscar estágios
     setStages([]);
     getKanbanStages(selectedAttr).then(kanbanStages => {
       debugLog('[KanbanDebug] Stages carregados:', kanbanStages);
@@ -90,9 +90,10 @@ export function useKanbanBoardData() {
     setLoading(false);
   }, [selectedAttr, stages]);
 
-  // Sempre que stages mudar, recarrega todos os contatos e monta matriz
+  // Sempre que stages mudar, zera matriz e recarrega todos os contatos e monta matriz
   useEffect(() => {
     debugLog('[KanbanDebug] useEffect para carregar contatos', { selectedAttr, stages });
+    setKanbanMatrix({}); // Zera matriz ANTES de carregar contatos
     if (!selectedAttr || !stages.length) return;
     loadAllContacts();
   }, [selectedAttr, stages, loadAllContacts]);
@@ -122,13 +123,20 @@ export function useKanbanBoardData() {
     }
   }, [selectedAttr, loadAllContacts]);
 
-  // Nomes amigáveis dos valores
+  // Nomes amigáveis dos valores das colunas
   const attrDisplayNames = (() => {
     debugLog('[KanbanDebug] attrDisplayNames calculando', { listAttributes, selectedAttr });
     const attr = listAttributes.find(a => a.attribute_key === selectedAttr);
     if (!attr) return {};
     const map = {};
-    (attr.attribute_values || []).forEach(val => { map[val] = val; });
+    // Se o atributo tem um mapeamento de nomes amigáveis para os valores
+    if (attr.attribute_value_display_names && typeof attr.attribute_value_display_names === 'object') {
+      Object.entries(attr.attribute_value_display_names).forEach(([val, display]) => {
+        map[val] = display || val;
+      });
+    } else if (Array.isArray(attr.attribute_values)) {
+      attr.attribute_values.forEach(val => { map[val] = val; });
+    }
     map['Não Atribuído'] = 'Não Atribuído';
     debugLog('[KanbanDebug] attrDisplayNames:', map);
     return map;
