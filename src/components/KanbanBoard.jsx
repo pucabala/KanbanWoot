@@ -116,52 +116,6 @@ function KanbanBoard() {
     setLoadingMoreByStage(prev => ({ ...prev, [stage]: false }));
   }, [selectedAttr]);
 
-  // Handler para carregar mais em uma coluna
-  const handleLoadMoreInColumn = useCallback((stage) => {
-    setVisibleByStage(prev => ({ ...prev, [stage]: (prev[stage] || INCREMENT) + INCREMENT }));
-    // Se já carregou tudo do cache, busca próxima página
-    if ((contactsCache[stage]?.length || 0) < (metaByStage[stage]?.count || 999999) && hasMoreByStage[stage]) {
-      const nextPage = (pageByStage[stage] || 1) + 1;
-      setPageByStage(prev => ({ ...prev, [stage]: nextPage }));
-      fetchStagePage(stage, nextPage);
-    }
-  }, [contactsCache, metaByStage, hasMoreByStage, pageByStage, fetchStagePage]);
-
-  // Carrega a primeira página de cada coluna ao montar
-  useEffect(() => {
-    stages.forEach(stage => {
-      if ((contactsCache[stage]?.length || 0) === 0 && hasMoreByStage[stage]) {
-        fetchStagePage(stage, 1);
-      }
-    });
-  }, [stages, fetchStagePage, contactsCache, hasMoreByStage]);
-
-  // Inicializa controles por coluna
-  useEffect(() => {
-    if (!stages.length) return;
-    setVisibleByStage(stages.reduce((acc, stage) => { acc[stage] = INCREMENT; return acc; }, {}));
-    setPageByStage(stages.reduce((acc, stage) => { acc[stage] = 1; return acc; }, {}));
-    setHasMoreByStage(stages.reduce((acc, stage) => { acc[stage] = true; return acc; }, {}));
-    setContactsCache(stages.reduce((acc, stage) => { acc[stage] = []; return acc; }, {}));
-    setMetaByStage(stages.reduce((acc, stage) => { acc[stage] = { count: 0, current_page: 1 }; return acc; }, {}));
-  }, [stages]);
-
-  // Compute attrDisplayNames for the selected attribute (values to display names)
-  const attrDisplayNames = React.useMemo(() => {
-    const attr = listAttributes.find(a => a.attribute_key === selectedAttr);
-    if (!attr) return {};
-    // If attribute_values is an array of strings, use them as both key and value
-    if (Array.isArray(attr.attribute_values)) {
-      const map = {};
-      attr.attribute_values.forEach(val => {
-        map[val] = val;
-      });
-      map['Não Atribuído'] = 'Não Atribuído';
-      return map;
-    }
-    return {};
-  }, [listAttributes, selectedAttr]);
-
   const onDragEnd = async ({ source, destination }) => {
     debugLog('DragEnd', { source, destination });
     if (!destination) return;
@@ -187,6 +141,59 @@ function KanbanBoard() {
       alert("Erro ao atualizar estágio no Chatwoot.");
     }
   };
+
+  // Handler para carregar mais em uma coluna (infinite scroll)
+  const handleLoadMoreInColumn = useCallback((stage) => {
+    // Só busca próxima página se não estiver carregando e ainda houver mais
+    if (loadingMoreByStage[stage] || !hasMoreByStage[stage]) return;
+    const nextPage = (pageByStage[stage] || 1) + 1;
+    setLoadingMoreByStage(prev => ({ ...prev, [stage]: true }));
+    fetchStagePage(stage, nextPage);
+    setPageByStage(prev => ({ ...prev, [stage]: nextPage }));
+    setVisibleByStage(prev => ({ ...prev, [stage]: (prev[stage] || INCREMENT) + INCREMENT }));
+  }, [loadingMoreByStage, hasMoreByStage, pageByStage, fetchStagePage]);
+
+  // Carrega a primeira página de cada coluna ao montar ou ao trocar de funil
+  useEffect(() => {
+    if (!stages.length) return;
+    stages.forEach(stage => {
+      fetchStagePage(stage, 1);
+    });
+    setVisibleByStage(stages.reduce((acc, stage) => { acc[stage] = INCREMENT; return acc; }, {}));
+    setPageByStage(stages.reduce((acc, stage) => { acc[stage] = 1; return acc; }, {}));
+    setHasMoreByStage(stages.reduce((acc, stage) => { acc[stage] = true; return acc; }, {}));
+    setContactsCache(stages.reduce((acc, stage) => { acc[stage] = []; return acc; }, {}));
+    setMetaByStage(stages.reduce((acc, stage) => { acc[stage] = { count: 0, current_page: 1 }; return acc; }, {}));
+  }, [stages]);
+
+  // Atualiza hasMoreByStage sempre que metaByStage ou contactsCache mudar
+  useEffect(() => {
+    setHasMoreByStage(prev => {
+      const updated = { ...prev };
+      stages.forEach(stage => {
+        const meta = metaByStage[stage] || {};
+        const loaded = (contactsCache[stage]?.length || 0);
+        updated[stage] = loaded < (meta.count || 0);
+      });
+      return updated;
+    });
+  }, [metaByStage, contactsCache, stages]);
+
+  // Compute attrDisplayNames for the selected attribute (values to display names)
+  const attrDisplayNames = React.useMemo(() => {
+    const attr = listAttributes.find(a => a.attribute_key === selectedAttr);
+    if (!attr) return {};
+    // If attribute_values is an array of strings, use them as both key and value
+    if (Array.isArray(attr.attribute_values)) {
+      const map = {};
+      attr.attribute_values.forEach(val => {
+        map[val] = val;
+      });
+      map['Não Atribuído'] = 'Não Atribuído';
+      return map;
+    }
+    return {};
+  }, [listAttributes, selectedAttr]);
 
   if (loading && contacts.length === 0) {
     return <div className="p-4">Carregando Kanban...</div>;
