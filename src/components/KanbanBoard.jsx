@@ -9,20 +9,19 @@ export default function KanbanBoard() {
     selectedAttr,
     setSelectedAttr,
     stages,
-    contactsCache,
-    hasMoreByStage,
-    loadingByStage,
-    loadMore,
+    kanbanMatrix,
     moveCard,
     attrDisplayNames,
-    loading
+    loading,
+    loadingSync,
+    reloadKanban
   } = useKanbanBoardData();
 
   const onDragEnd = async ({ source, destination }) => {
     if (!destination) return;
     const fromStage = source.droppableId;
     const toStage = destination.droppableId;
-    const contact = (contactsCache[fromStage] || [])[source.index];
+    const contact = (kanbanMatrix[fromStage] || [])[source.index];
     if (!contact) return;
     await moveCard(contact.id, fromStage, toStage);
   };
@@ -46,6 +45,10 @@ export default function KanbanBoard() {
             </option>
           ))}
         </select>
+        <button className="ml-4 px-3 py-1 rounded bg-blue-500 text-white" onClick={reloadKanban} disabled={loading || loadingSync}>
+          Recarregar
+        </button>
+        {loadingSync && <span className="ml-2 text-blue-600 animate-pulse">Sincronizando...</span>}
       </div>
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-6 p-6 overflow-x-auto bg-gray-50 min-h-screen">
@@ -53,11 +56,12 @@ export default function KanbanBoard() {
             <KanbanColumn
               key={stage}
               stage={stage}
-              contacts={contactsCache[stage] || []}
+              contacts={kanbanMatrix[stage] || []}
               attrDisplayNames={attrDisplayNames}
-              onLoadMore={() => loadMore(stage)}
-              hasMore={hasMoreByStage[stage]}
-              loadingMore={loadingByStage[stage]}
+              // Infinite scroll removido: todos os contatos já estão em memória
+              onLoadMore={null}
+              hasMore={false}
+              loadingMore={false}
             />
           ))}
         </div>
