@@ -18,6 +18,7 @@ function KanbanBoard() {
   const [metaByStage, setMetaByStage] = useState({}); // {stage: {count, current_page}}
   const [loadingMoreByStage, setLoadingMoreByStage] = useState({}); // {stage: boolean}
   const INCREMENT = 15;
+  const loadingRefByStage = useRef({});
 
   useEffect(() => {
     // Carrega atributos do tipo lista para o dropdown
@@ -79,41 +80,45 @@ function KanbanBoard() {
 
   // Função para buscar contatos de uma coluna/página (chama utilitária)
   const fetchStagePage = useCallback(async (stage, page) => {
+    if (loadingRefByStage.current[stage]) return;
+    loadingRefByStage.current[stage] = true;
     setLoadingMoreByStage(prev => ({ ...prev, [stage]: true }));
-    const data = await fetchContactsForStage({ page, selectedAttr, stage });
-    debugLog('[KanbanBoard] fetchStagePage', {
-      stage,
-      page,
-      payloadLength: data.payload?.length,
-      meta: data.meta,
-      payload: data.payload
-    });
-    // Remove contatos duplicados por id e garante que cada contato só aparece em UMA coluna
-    setContactsCache(prev => {
-      // Remove o contato de todas as outras colunas antes de adicionar nesta
-      const newCache = { ...prev };
-      const newContacts = (data.payload || []);
-      // Cria um set com os ids que virão nesta coluna
-      const newIds = new Set(newContacts.map(c => c.id));
-      // Remove esses ids de todas as outras colunas
-      Object.keys(newCache).forEach(col => {
-        if (col !== stage) {
-          newCache[col] = (newCache[col] || []).filter(c => !newIds.has(c.id));
-        }
+    try {
+      const data = await fetchContactsForStage({ page, selectedAttr, stage });
+      debugLog('[KanbanBoard] fetchStagePage', {
+        stage,
+        page,
+        payloadLength: data.payload?.length,
+        meta: data.meta,
+        payload: data.payload
       });
-      // Adiciona os contatos desta página nesta coluna
-      newCache[stage] = [...(newCache[stage] || []), ...newContacts.filter(c => !(newCache[stage] || []).some(e => e.id === c.id))];
-      return newCache;
-    });
-    setMetaByStage(prev => ({
-      ...prev,
-      [stage]: data.meta || { count: (prev[stage]?.count || 0), current_page: page }
-    }));
-    setHasMoreByStage(prev => ({
-      ...prev,
-      [stage]: (data.payload?.length > 0) && ((data.meta?.count || 0) > ((data.meta?.current_page || 1) * 15))
-    }));
-    setLoadingMoreByStage(prev => ({ ...prev, [stage]: false }));
+      setContactsCache(prev => {
+        const newCache = { ...prev };
+        const newContacts = (data.payload || []);
+        const newIds = new Set(newContacts.map(c => c.id));
+        Object.keys(newCache).forEach(col => {
+          if (col !== stage) {
+            newCache[col] = (newCache[col] || []).filter(c => !newIds.has(c.id));
+          }
+        });
+        newCache[stage] = [...(newCache[stage] || []), ...newContacts.filter(c => !(newCache[stage] || []).some(e => e.id === c.id))];
+        return newCache;
+      });
+      setMetaByStage(prev => ({
+        ...prev,
+        [stage]: data.meta || { count: (prev[stage]?.count || 0), current_page: page }
+      }));
+      setHasMoreByStage(prev => ({
+        ...prev,
+        [stage]: (data.payload?.length > 0) && ((data.meta?.count || 0) > ((data.meta?.current_page || 1) * 15))
+      }));
+      // Só incrementa página/visibilidade se realmente veio dado novo
+      setPageByStage(prev => ({ ...prev, [stage]: page }));
+      setVisibleByStage(prev => ({ ...prev, [stage]: (prev[stage] || INCREMENT) + INCREMENT }));
+    } finally {
+      setLoadingMoreByStage(prev => ({ ...prev, [stage]: false }));
+      loadingRefByStage.current[stage] = false;
+    }
   }, [selectedAttr]);
 
   const onDragEnd = async ({ source, destination }) => {
@@ -144,27 +149,27 @@ function KanbanBoard() {
 
   // Handler para carregar mais em uma coluna (infinite scroll)
   const handleLoadMoreInColumn = useCallback((stage) => {
-    // Só busca próxima página se não estiver carregando e ainda houver mais
-    if (loadingMoreByStage[stage] || !hasMoreByStage[stage]) return;
+    if (loadingRefByStage.current[stage] || loadingMoreByStage[stage] || !hasMoreByStage[stage]) return;
     const nextPage = (pageByStage[stage] || 1) + 1;
-    setLoadingMoreByStage(prev => ({ ...prev, [stage]: true }));
     fetchStagePage(stage, nextPage);
-    setPageByStage(prev => ({ ...prev, [stage]: nextPage }));
-    setVisibleByStage(prev => ({ ...prev, [stage]: (prev[stage] || INCREMENT) + INCREMENT }));
   }, [loadingMoreByStage, hasMoreByStage, pageByStage, fetchStagePage]);
 
   // Carrega a primeira página de cada coluna ao montar ou ao trocar de funil
   useEffect(() => {
     if (!stages.length) return;
-    stages.forEach(stage => {
-      fetchStagePage(stage, 1);
-    });
+    // Inicializa controles por coluna
     setVisibleByStage(stages.reduce((acc, stage) => { acc[stage] = INCREMENT; return acc; }, {}));
     setPageByStage(stages.reduce((acc, stage) => { acc[stage] = 1; return acc; }, {}));
     setHasMoreByStage(stages.reduce((acc, stage) => { acc[stage] = true; return acc; }, {}));
     setContactsCache(stages.reduce((acc, stage) => { acc[stage] = []; return acc; }, {}));
     setMetaByStage(stages.reduce((acc, stage) => { acc[stage] = { count: 0, current_page: 1 }; return acc; }, {}));
-  }, [stages]);
+    // Limpa refs de loading
+    loadingRefByStage.current = {};
+    // Só depois de inicializar, carrega a primeira página de cada coluna
+    stages.forEach(stage => {
+      fetchStagePage(stage, 1);
+    });
+  }, [stages, fetchStagePage]);
 
   // Atualiza hasMoreByStage sempre que metaByStage ou contactsCache mudar
   useEffect(() => {
