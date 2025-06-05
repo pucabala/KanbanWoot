@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getContactsFiltered, getKanbanStages, getListAttributes, updateKanbanStage } from '../api';
+import { getContactsFiltered, getKanbanStages, getListAttributes, updateKanbanStage, getConnectionParam } from '../api';
 import { debugLog } from '../debug';
 
 export function useKanbanBoardData() {
@@ -11,11 +11,20 @@ export function useKanbanBoardData() {
   const [loading, setLoading] = useState(true);
   const [loadingSync, setLoadingSync] = useState(false);
 
-  // Carrega atributos do tipo lista para o dropdown
+  // Inicializa selectedAttr a partir da querystring, cookie ou valor padrão
   useEffect(() => {
     getListAttributes().then(attrs => {
       setListAttributes(attrs);
-      if (attrs.length && !selectedAttr) setSelectedAttr(attrs[0].attribute_key);
+      // Busca valor inicial do atributo (querystring > cookie > primeiro disponível)
+      let initialAttr = '';
+      if (attrs.length) {
+        // Usa getConnectionParam para buscar da querystring/cookie/env
+        initialAttr = getConnectionParam('kbw', 'REACT_APP_KBW_ATTR');
+        if (!initialAttr || !attrs.some(a => a.attribute_key === initialAttr)) {
+          initialAttr = attrs[0].attribute_key;
+        }
+      }
+      setSelectedAttr(prev => prev || initialAttr);
     });
   }, []);
 
