@@ -199,7 +199,11 @@ export async function getContactsFiltered(page = 1, pageSize = 15, attributeKey,
         })
       });
       contacts = data.payload || [];
-      debugLog(`[Kanban] Filtro aplicado: página ${page} retornou ${contacts.length} contatos`);
+      debugLog(`[Kanban] Filtro aplicado: página ${page} retornou ${contacts.length} contatos`, {
+        ids: contacts.map(c => c.id),
+        stage,
+        attributeKey
+      });
     } catch (err) {
       if (err.status === 422) {
         erroFiltragem = true;

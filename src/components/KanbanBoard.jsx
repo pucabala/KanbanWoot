@@ -85,17 +85,22 @@ function KanbanBoard() {
       stage,
       page,
       payloadLength: data.payload?.length,
-      meta: data.meta
+      meta: data.meta,
+      payload: data.payload
     });
-    setContactsCache(prev => ({
-      ...prev,
-      [stage]: [...(prev[stage] || []), ...(data.payload || [])]
-    }));
+    // Remove contatos duplicados por id
+    setContactsCache(prev => {
+      const existing = prev[stage] || [];
+      const newContacts = (data.payload || []).filter(c => !existing.some(e => e.id === c.id));
+      return {
+        ...prev,
+        [stage]: [...existing, ...newContacts]
+      };
+    });
     setMetaByStage(prev => ({
       ...prev,
       [stage]: data.meta || { count: (prev[stage]?.count || 0), current_page: page }
     }));
-    // Corrige cálculo de hasMoreByStage
     setHasMoreByStage(prev => ({
       ...prev,
       [stage]: (data.payload?.length > 0) && ((data.meta?.count || 0) > ((data.meta?.current_page || 1) * 15))
