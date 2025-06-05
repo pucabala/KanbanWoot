@@ -15,14 +15,22 @@ export function useKanbanBoardData() {
   useEffect(() => {
     getListAttributes().then(attrs => {
       setListAttributes(attrs);
+      if (!attrs.length) {
+        // Aviso se não houver nenhum atributo do tipo lista
+        setSelectedAttr('');
+        setStages([]);
+        setKanbanMatrix({});
+        setLoading(false);
+        debugLog('Nenhum atributo do tipo lista disponível. Configure um campo customizado do tipo lista no Chatwoot.');
+        return;
+      }
       // Busca valor inicial do atributo (querystring > cookie > primeiro disponível)
       let initialAttr = '';
-      if (attrs.length) {
-        // Usa getConnectionParam para buscar da querystring/cookie/env
-        initialAttr = getConnectionParam('kbw', 'REACT_APP_KBW_ATTR');
-        if (!initialAttr || !attrs.some(a => a.attribute_key === initialAttr)) {
-          initialAttr = attrs[0].attribute_key;
-        }
+      let kbw = getConnectionParam('kbw', 'REACT_APP_KBW_ATTR');
+      if (kbw && attrs.some(a => a.attribute_key === kbw)) {
+        initialAttr = kbw;
+      } else {
+        initialAttr = attrs[0].attribute_key;
       }
       setSelectedAttr(prev => prev || initialAttr);
     });

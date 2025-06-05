@@ -2,6 +2,7 @@ import React from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
 import KanbanColumn from './KanbanColumn';
 import { useKanbanBoardData } from '../hooks/useKanbanBoardData';
+import Notification from './Notification';
 
 export default function KanbanBoard() {
   const {
@@ -16,6 +17,15 @@ export default function KanbanBoard() {
     loadingSync,
     reloadKanban
   } = useKanbanBoardData();
+
+  // Exibe aviso se não houver nenhum atributo do tipo lista
+  if (!loading && listAttributes.length === 0) {
+    return (
+      <div className="p-8 max-w-xl mx-auto">
+        <Notification type="error" message="Nenhum atributo do tipo lista disponível. Configure um campo customizado do tipo lista no Chatwoot para usar o Kanban." />
+      </div>
+    );
+  }
 
   const onDragEnd = async ({ source, destination }) => {
     if (!destination) return;
