@@ -51,31 +51,46 @@ export function useKanbanBoardData() {
     });
   }, [stages, selectedAttr]);
 
-  const loadStagePage = useCallback(async (stage, page) => {
-    if (loadingRef.current[stage]) return;
-    loadingRef.current[stage] = true;
-    setLoadingByStage(prev => ({ ...prev, [stage]: true }));
+  const loadStagePage = useCallback(async (stageParam, page) => {
+    const currentAttr = selectedAttr;
+    const currentStage = stageParam;
+    if (loadingRef.current[currentStage]) return;
+    loadingRef.current[currentStage] = true;
+    setLoadingByStage(prev => ({ ...prev, [currentStage]: true }));
     try {
-      const isUnassigned = stage === 'Não Atribuído';
-      const data = await getContactsFiltered(page, INCREMENT, selectedAttr, isUnassigned ? null : stage);
+      const isUnassigned = currentStage === 'Não Atribuído';
+      const data = await getContactsFiltered(page, INCREMENT, currentAttr, isUnassigned ? null : currentStage);
+      // Só atualiza se selectedAttr e stage não mudaram
+      if (selectedAttr !== currentAttr) return;
       setContactsCache(prev => {
+        // Garante que está atualizando a coluna correta
+        if (selectedAttr !== currentAttr) return prev;
         const newCache = { ...prev };
         const newContacts = (data.payload || []);
         const newIds = new Set(newContacts.map(c => c.id));
         Object.keys(newCache).forEach(col => {
-          if (col !== stage) {
+          if (col !== currentStage) {
             newCache[col] = (newCache[col] || []).filter(c => !newIds.has(c.id));
           }
         });
-        newCache[stage] = [...(newCache[stage] || []), ...newContacts.filter(c => !(newCache[stage] || []).some(e => e.id === c.id))];
+        newCache[currentStage] = [...(newCache[currentStage] || []), ...newContacts.filter(c => !(newCache[currentStage] || []).some(e => e.id === c.id))];
         return newCache;
       });
-      setMetaByStage(prev => ({ ...prev, [stage]: data.meta || { count: (prev[stage]?.count || 0), current_page: page } }));
-      setHasMoreByStage(prev => ({ ...prev, [stage]: (data.payload?.length > 0) && ((data.meta?.count || 0) > ((data.meta?.current_page || 1) * INCREMENT)) }));
-      setPageByStage(prev => ({ ...prev, [stage]: page }));
+      setMetaByStage(prev => {
+        if (selectedAttr !== currentAttr) return prev;
+        return { ...prev, [currentStage]: data.meta || { count: (prev[currentStage]?.count || 0), current_page: page } };
+      });
+      setHasMoreByStage(prev => {
+        if (selectedAttr !== currentAttr) return prev;
+        return { ...prev, [currentStage]: (data.payload?.length > 0) && ((data.meta?.count || 0) > ((data.meta?.current_page || 1) * INCREMENT)) };
+      });
+      setPageByStage(prev => {
+        if (selectedAttr !== currentAttr) return prev;
+        return { ...prev, [currentStage]: page };
+      });
     } finally {
-      setLoadingByStage(prev => ({ ...prev, [stage]: false }));
-      loadingRef.current[stage] = false;
+      setLoadingByStage(prev => ({ ...prev, [currentStage]: false }));
+      loadingRef.current[currentStage] = false;
     }
   }, [selectedAttr]);
 
