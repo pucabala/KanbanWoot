@@ -1,8 +1,8 @@
-const isDebug = window._env_ && window._env_.REACT_APP_DEBUG === 'true';
-
 export function debugLog(...args) {
+  // Sempre imprime no console
   const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : String(a))).join(' ');
   console.log('[DEBUG]', ...args);
+  // Opcional: também mostra em div de debug se existir
   const logDiv = document.getElementById('debug-log');
   if (logDiv) {
     const p = document.createElement('div');
