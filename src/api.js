@@ -1,16 +1,3 @@
-//api.js
-import { debugLog } from './debug';
-
-// Configurações da API do Chatwoot vindas do window._env_ (injetadas pelo .env.js)
-const CHATWOOT_URL = (window._env_ && window._env_.REACT_APP_CHATWOOT_URL) || '';
-const ACCOUNT_ID = (window._env_ && window._env_.REACT_APP_CHATWOOT_ACCOUNT_ID) || '';
-const TOKEN = (window._env_ && window._env_.REACT_APP_CHATWOOT_TOKEN) || '';
-
-const chatwootHeaders = {
-  'Content-Type': 'application/json',
-  'api_access_token': TOKEN
-};
-
 async function chatwootFetch(endpoint, options = {}) {
   const url = `${CHATWOOT_URL}/api/v1/accounts/${ACCOUNT_ID}${endpoint}`;
   debugLog('chatwootFetch', url, options);
