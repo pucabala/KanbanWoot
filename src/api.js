@@ -50,8 +50,17 @@ debugLog('api.js: módulo carregado');
 export async function getContacts() {
   debugLog('api.js: getContacts chamado');
   try {
-    const data = await chatwootFetch('/contacts');
-    return data.payload || [];
+    // A API do Chatwoot pagina /contacts (15 por página); busca todas as páginas
+    const all = [];
+    const MAX_PAGES = 1000; // trava de segurança contra loop infinito
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const data = await chatwootFetch(`/contacts?page=${page}`);
+      const items = data?.payload || [];
+      all.push(...items);
+      const total = data?.meta?.count;
+      if (!items.length || (typeof total === 'number' && all.length >= total)) break;
+    }
+    return all;
   } catch (error) {
     debugLog('Erro ao buscar contatos:', error);
     throw error;
