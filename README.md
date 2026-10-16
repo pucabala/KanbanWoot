@@ -15,6 +15,8 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 - ↗️ Link para abrir o contato no Chatwoot
 - 🏁 Etapas de ganho e perda com motivo (obrigatório na perda), exibido no card
 - 🎯 Dentro do Painel de Aplicativos, destaca o card do contato da conversa aberta
+- 💰 Valor do negócio no card e total por coluna
+- 🔄 Atualização ao vivo: mudanças feitas por outros agentes aparecem sozinhas
 - ⚡ Movimentação otimista: o card muda de coluna na hora e volta, com aviso, se a API recusar
 - ✅ Filtro opcional pelo atributo `kanbanwoot` para escolher quais contatos entram no board
 - 📝 Nomes amigáveis (display name) dos atributos e dos atributos `kbw_*` mostrados nos cards
@@ -72,9 +74,21 @@ Dentro do Painel de Aplicativos, o KanbanWoot pergunta ao Chatwoot qual contato 
 
 As mensagens só são aceitas da página que contém o KanbanWoot e da origem do Chatwoot (a do próprio app no modo `session`; a de `CHATWOOT_PUBLIC_URL` no modo `proxy`). Esse contexto não é assinado pelo Chatwoot e serve só para o destaque, nunca para autenticação.
 
+### Valor do negócio
+
+O valor vem de um atributo de contato (padrão `kbw_valor`, configurável em `KANBANWOOT_VALUE_ATTRIBUTE`), de preferência do tipo número. Também são aceitos textos como `1.500,00`, `R$ 1500` ou `1500.5`. O card mostra o valor formatado (moeda em `KANBANWOOT_CURRENCY`, padrão `BRL`) e cada coluna mostra a soma.
+
+A API do Chatwoot não soma valores, então o total é dos cards **carregados**: enquanto a coluna tiver mais páginas, ele aparece como "parcial: N de M". Ao mover para uma etapa de ganho um contato sem valor, o diálogo oferece um campo opcional para informá-lo.
+
+### Atualização ao vivo
+
+A cada `KANBANWOOT_REFRESH_SECONDS` segundos (padrão 30; `0` desliga), com a aba visível, e sempre que a aba volta a ficar visível, o KanbanWoot rebusca as páginas já carregadas de todas as colunas e troca o board de uma vez. Assim, mudanças feitas por outros agentes ou pelo próprio Chatwoot aparecem sem recarregar a página. O botão "↻ Atualizar" faz isso na hora.
+
+A atualização fica pausada enquanto um card está sendo arrastado ou com o diálogo de ganho/perda aberto, e é descartada se você mover um card ou carregar mais contatos enquanto ela está em andamento. Cada atualização refaz uma busca por página carregada em cada coluna; em boards muito grandes, aumente o intervalo.
+
 ### Cards
 
-Mostram nome, foto, telefone, e-mail, tempo na etapa, ganho/perda com motivo, link para o contato no Chatwoot e os atributos do contato cuja chave começa com `kbw_`, com o nome amigável de cada um. O menu "Mover para…" leva o card para o topo da coluna escolhida.
+Mostram nome, foto, telefone, e-mail, valor, tempo na etapa, ganho/perda com motivo, link para o contato no Chatwoot e os atributos do contato cuja chave começa com `kbw_`, com o nome amigável de cada um. O menu "Mover para…" leva o card para o topo da coluna escolhida.
 
 ---
 
@@ -230,6 +244,9 @@ No Traefik ou no Easypanel, use uma regra de caminho `/kanban` no **mesmo domín
 | `KANBANWOOT_WON_STAGES` | não | Nomes das etapas de ganho, separados por vírgula (veja "Ganho e perda") |
 | `KANBANWOOT_LOST_STAGES` | não | Nomes das etapas de perda, separados por vírgula |
 | `KANBANWOOT_LOST_REASONS` | não | Motivos de perda sugeridos, separados por vírgula |
+| `KANBANWOOT_VALUE_ATTRIBUTE` | não | Atributo com o valor do negócio (padrão `kbw_valor`) |
+| `KANBANWOOT_CURRENCY` | não | Moeda do valor, código ISO 4217 (padrão `BRL`) |
+| `KANBANWOOT_REFRESH_SECONDS` | não | Intervalo da atualização ao vivo em segundos (padrão `30`; `0` desliga) |
 | `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
 
 ### Modo `proxy`: token de serviço
@@ -257,6 +274,9 @@ docker run -d -p 3000:3000 \
 | `KANBANWOOT_WON_STAGES` | não | Nomes das etapas de ganho, separados por vírgula (veja "Ganho e perda") |
 | `KANBANWOOT_LOST_STAGES` | não | Nomes das etapas de perda, separados por vírgula |
 | `KANBANWOOT_LOST_REASONS` | não | Motivos de perda sugeridos, separados por vírgula |
+| `KANBANWOOT_VALUE_ATTRIBUTE` | não | Atributo com o valor do negócio (padrão `kbw_valor`) |
+| `KANBANWOOT_CURRENCY` | não | Moeda do valor, código ISO 4217 (padrão `BRL`) |
+| `KANBANWOOT_REFRESH_SECONDS` | não | Intervalo da atualização ao vivo em segundos (padrão `30`; `0` desliga) |
 | `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
 
 Os nomes antigos (`REACT_APP_CHATWOOT_URL`, `REACT_APP_CHATWOOT_ACCOUNT_ID`, `REACT_APP_CHATWOOT_TOKEN`) continuam aceitos.

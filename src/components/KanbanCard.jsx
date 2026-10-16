@@ -2,7 +2,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import CustomAttributesList from './CustomAttributesList';
-import { getChatwootContactUrl, stageSinceKey, stageReasonKey, stageOutcome, STALE_DAYS, UNASSIGNED_STAGE } from '../api';
+import { getChatwootContactUrl, stageSinceKey, stageReasonKey, stageOutcome, STALE_DAYS, UNASSIGNED_STAGE, VALUE_ATTRIBUTE, parseValue, formatValue } from '../api';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -59,6 +59,7 @@ export default function KanbanCard({ contact, index, stage, stages = [], attribu
   // Em etapa final o card não "envelhece"
   const isStale = !outcome && days !== null && days >= STALE_DAYS;
   const reason = contact.custom_attributes?.[stageReasonKey(attributeKey)];
+  const dealValue = parseValue(contact.custom_attributes?.[VALUE_ATTRIBUTE]);
 
   // Rola até o card do contato da conversa aberta no Chatwoot
   const elementRef = useRef(null);
@@ -110,6 +111,9 @@ export default function KanbanCard({ contact, index, stage, stages = [], attribu
             {contact.email && phone && <span className="mx-2">·</span>}
             {contact.email && <span>{contact.email}</span>}
           </div>
+          {dealValue !== null && (
+            <div className="mt-1 text-sm font-semibold text-emerald-700" title="Valor do negócio">{formatValue(dealValue)}</div>
+          )}
           <OutcomeBadge outcome={outcome} reason={reason} />
           {/* Mostra atributos customizados usando componente separado */}
           {contact.custom_attributes && (

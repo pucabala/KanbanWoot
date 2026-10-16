@@ -9,6 +9,8 @@ import {
   stageSinceKey,
   stageReasonKey,
   stageOutcome,
+  VALUE_ATTRIBUTE,
+  REFRESH_SECONDS,
   removeContactCustomAttributes,
   UNASSIGNED_STAGE,
   KANBANWOOT_FLAG_KEY,
@@ -70,6 +72,15 @@ export function useKanbanData() {
   const generationRef = useRef(0);
   // Colunas com busca em andamento (evita pedir a mesma página duas vezes antes do re-render)
   const inFlightRef = useRef(new Set());
+  // Atualização ao vivo: muda a cada movimentação ou página carregada, para descartar uma
+  // atualização que começou antes e ficou desatualizada
+  const changeVersionRef = useRef(0);
+  const movesInFlightRef = useRef(0);
+  const refreshingRef = useRef(false);
+  // Pausa enquanto o usuário arrasta um card ou está com um diálogo aberto
+  const livePausedRef = useRef(false);
+  const setLivePaused = useCallback(paused => { livePausedRef.current = paused; }, []);
+  const [lastRefresh, setLastRefresh] = useState(null);
 
   // Filtros do board: busca (nome/telefone/e-mail) e etiqueta
   const [filters, setFilters] = useState({ search: '', label: '' });
@@ -147,6 +158,7 @@ export function useKanbanData() {
     try {
       const { contacts, count } = await getContactsByStage(attributeKey, stage, page, { onlyFlagged, ...filters });
       if (generation !== generationRef.current) return;
+      changeVersionRef.current += 1;
       dispatch({ type: 'STAGE_LOADED', payload: { stage, page, contacts, count } });
     } catch (err) {
       if (generation !== generationRef.current) return;
@@ -170,13 +182,54 @@ export function useKanbanData() {
     // boardRef é atualizado no próximo render; prepara o estado para o loadMore já agora
     boardRef.current = kanbanReducer({}, { type: 'RESET', payload: columns });
     setLoading(false);
+    setLastRefresh(new Date());
     columns.forEach(stage => loadMore(stage));
   }, [attributeDefs, attributeKey, columns, loadMore]);
 
+  // Atualização ao vivo: rebusca as páginas já carregadas de todas as colunas e troca o board de uma vez
+  const refresh = useCallback(async () => {
+    if (!attributeKey || refreshingRef.current || livePausedRef.current || movesInFlightRef.current) return;
+    const stages = Object.entries(boardRef.current).filter(([, col]) => col.page > 0 && !col.loading);
+    if (!stages.length || inFlightRef.current.size) return;
+    refreshingRef.current = true;
+    const generation = generationRef.current;
+    const version = changeVersionRef.current;
+    try {
+      const results = await Promise.all(stages.map(async ([stage, col]) => {
+        const pages = await Promise.all(
+          Array.from({ length: col.page }, (_, i) => getContactsByStage(attributeKey, stage, i + 1, { onlyFlagged, ...filters }))
+        );
+        return [stage, { contacts: pages.flatMap(p => p.contacts), count: pages[0]?.count ?? null }];
+      }));
+      // Descarta se algo mudou no meio do caminho (troca de atributo, movimentação, nova página, arraste)
+      if (generation !== generationRef.current || version !== changeVersionRef.current) return;
+      if (livePausedRef.current || movesInFlightRef.current || inFlightRef.current.size) return;
+      dispatch({ type: 'REFRESHED', payload: Object.fromEntries(results) });
+      setLastRefresh(new Date());
+    } catch (err) {
+      console.error('[DEBUG] Erro na atualização ao vivo:', err);
+    } finally {
+      refreshingRef.current = false;
+    }
+  }, [attributeKey, onlyFlagged, filters]);
+
+  // A cada REFRESH_SECONDS com a aba visível, e logo que a aba volta a ficar visível
+  useEffect(() => {
+    if (!REFRESH_SECONDS) return undefined;
+    const timer = setInterval(() => { if (!document.hidden) refresh(); }, REFRESH_SECONDS * 1000);
+    const onVisible = () => { if (!document.hidden) refresh(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refresh]);
+
   // Move um card: atualização otimista, desfeita se a API falhar
-  // reason: motivo do ganho/perda, quando o destino é uma etapa final
-  const moveContact = useCallback(async ({ contactId, source, destination, sourceIndex, destinationIndex, reason }) => {
+  // reason: motivo do ganho/perda, quando o destino é uma etapa final; dealValue: valor informado no ganho
+  const moveContact = useCallback(async ({ contactId, source, destination, sourceIndex, destinationIndex, reason, dealValue }) => {
     if (source === destination) {
+      changeVersionRef.current += 1;
       dispatch({ type: 'MOVE_CARD', payload: { source, destination, contactId, index: destinationIndex } });
       return;
     }
@@ -187,7 +240,8 @@ export function useKanbanData() {
     const previous = {
       [attributeKey]: current[attributeKey],
       [sinceKey]: current[sinceKey],
-      [reasonKey]: current[reasonKey]
+      [reasonKey]: current[reasonKey],
+      [VALUE_ATTRIBUTE]: current[VALUE_ATTRIBUTE]
     };
     const value = destination === UNASSIGNED_STAGE ? undefined : destination;
     if (typeof value !== 'undefined' && !attribute.attribute_values.includes(value)) {
@@ -203,7 +257,10 @@ export function useKanbanData() {
       // Fora de etapa final, um motivo antigo é limpo (null: o PUT do Chatwoot não remove chaves)
       if (stageOutcome(value)) next[reasonKey] = trimmed || null;
       else if (current[reasonKey] != null) next[reasonKey] = null;
+      if (typeof dealValue === 'number' && Number.isFinite(dealValue)) next[VALUE_ATTRIBUTE] = dealValue;
     }
+    changeVersionRef.current += 1;
+    movesInFlightRef.current += 1;
     dispatch({
       type: 'MOVE_CARD',
       payload: { source, destination, contactId, index: destinationIndex, attributes: next }
@@ -220,8 +277,14 @@ export function useKanbanData() {
         payload: { source: destination, destination: source, contactId, index: sourceIndex, attributes: previous }
       });
       throw err;
+    } finally {
+      movesInFlightRef.current -= 1;
+      changeVersionRef.current += 1;
     }
   }, [attribute, attributeKey]);
 
-  return { agent, board, columns, attribute, listAttributes, displayNames, loading, error, loadMore, moveContact, filters, setFilters, labels };
+  return {
+    agent, board, columns, attribute, listAttributes, displayNames, loading, error, loadMore, moveContact,
+    filters, setFilters, labels, refresh, lastRefresh, setLivePaused
+  };
 }

@@ -17,6 +17,11 @@ STALE_DAYS="${KANBANWOOT_STALE_DAYS:-7}"
 WON_STAGES="${KANBANWOOT_WON_STAGES:-}"
 LOST_STAGES="${KANBANWOOT_LOST_STAGES:-}"
 LOST_REASONS="${KANBANWOOT_LOST_REASONS:-}"
+# Valor do negócio: atributo numérico do contato e moeda (código ISO 4217)
+VALUE_ATTRIBUTE="${KANBANWOOT_VALUE_ATTRIBUTE:-kbw_valor}"
+CURRENCY="${KANBANWOOT_CURRENCY:-BRL}"
+# Atualização ao vivo, em segundos (0 desliga)
+REFRESH_SECONDS="${KANBANWOOT_REFRESH_SECONDS:-30}"
 
 # Escapa texto livre para uma string JavaScript entre aspas duplas
 js_escape() {
@@ -48,6 +53,17 @@ fi
 case "$CHATWOOT_ACCOUNT_ID" in
   *[!0-9]*) echo "Erro: CHATWOOT_ACCOUNT_ID deve ser numérico" >&2; exit 1 ;;
 esac
+case "$REFRESH_SECONDS" in
+  ''|*[!0-9]*) echo "Erro: KANBANWOOT_REFRESH_SECONDS deve ser um número de segundos (0 desliga)" >&2; exit 1 ;;
+esac
+if ! echo "$CURRENCY" | grep -Eq '^[A-Za-z]{3}$'; then
+  echo "Erro: KANBANWOOT_CURRENCY deve ser um código de moeda como BRL ou USD" >&2
+  exit 1
+fi
+if ! echo "$VALUE_ATTRIBUTE" | grep -Eq '^[A-Za-z0-9_]+$'; then
+  echo "Erro: KANBANWOOT_VALUE_ATTRIBUTE deve ser a chave de um atributo, como kbw_valor" >&2
+  exit 1
+fi
 case "$STALE_DAYS" in
   ''|*[!0-9]*) echo "Erro: KANBANWOOT_STALE_DAYS deve ser um número de dias" >&2; exit 1 ;;
 esac
@@ -91,6 +107,9 @@ $PROXY_LINE
   REACT_APP_WON_STAGES: "$(js_escape "$WON_STAGES")",
   REACT_APP_LOST_STAGES: "$(js_escape "$LOST_STAGES")",
   REACT_APP_LOST_REASONS: "$(js_escape "$LOST_REASONS")",
+  REACT_APP_VALUE_ATTRIBUTE: "${VALUE_ATTRIBUTE}",
+  REACT_APP_CURRENCY: "${CURRENCY}",
+  REACT_APP_REFRESH_SECONDS: "${REFRESH_SECONDS}",
   REACT_APP_DEBUG: "${DEBUG}"
 };
 JS

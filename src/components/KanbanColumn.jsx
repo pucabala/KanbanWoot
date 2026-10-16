@@ -2,7 +2,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import KanbanCard from './KanbanCard';
-import { UNASSIGNED_STAGE } from '../api';
+import { UNASSIGNED_STAGE, VALUE_ATTRIBUTE, parseValue, formatValue } from '../api';
 
 /**
  * @param {{
@@ -20,6 +20,10 @@ export default function KanbanColumn({ stage, column, onLoadMore, onMoveCard, st
   const scrollRef = useRef(null);
   const sentinelRef = useRef(null);
   const canLoadMore = Boolean(column?.hasMore && !column?.loading && !column?.error);
+  // Soma do valor dos cards carregados (a API do Chatwoot não soma; com mais páginas, o total é parcial)
+  const valued = contacts.map(c => parseValue(c.custom_attributes?.[VALUE_ATTRIBUTE])).filter(v => v !== null);
+  const total = valued.reduce((sum, v) => sum + v, 0);
+  const isPartial = Boolean(column?.hasMore);
 
   // Carrega a próxima página quando o fim da coluna fica visível
   useEffect(() => {
@@ -42,6 +46,14 @@ export default function KanbanColumn({ stage, column, onLoadMore, onMoveCard, st
           <span className="text-sm font-normal text-gray-500" aria-label="Total de contatos">{column.count}</span>
         )}
       </h2>
+      {valued.length > 0 && (
+        <div
+          className="px-4 py-1 text-xs text-emerald-800 bg-emerald-50 border-b border-gray-200"
+          title={isPartial ? `Soma dos ${contacts.length} cards carregados de ${column?.count ?? '?'}` : 'Soma dos valores da coluna'}
+        >
+          {formatValue(total)}{isPartial && <span className="text-gray-500"> (parcial: {contacts.length} de {column?.count ?? '?'})</span>}
+        </div>
+      )}
       <Droppable droppableId={stage}>
         {(provided, snapshot) => (
           <div

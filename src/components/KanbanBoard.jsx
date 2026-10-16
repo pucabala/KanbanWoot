@@ -1,19 +1,22 @@
 // KanbanBoard.jsx
 // Componente principal do Kanban dinâmico
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
 import Notification from './Notification';
 import ErrorMessage from './ErrorMessage';
 import { useKanbanData } from '../hooks/useKanbanData';
 import KanbanColumn from './KanbanColumn';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { CHATWOOT_LOGIN_URL, UNASSIGNED_STAGE, stageOutcome } from '../api';
+import { CHATWOOT_LOGIN_URL, UNASSIGNED_STAGE, stageOutcome, VALUE_ATTRIBUTE, parseValue } from '../api';
 import { useChatwootContext } from '../hooks/useChatwootContext';
 import OutcomeDialog from './OutcomeDialog';
 
 function KanbanBoard() {
   // Colunas carregadas página a página, filtradas no servidor
-  const { agent, board, columns, attribute, loading, error, listAttributes, displayNames, loadMore, moveContact, filters, setFilters, labels } = useKanbanData();
+  const {
+    agent, board, columns, attribute, loading, error, listAttributes, displayNames, loadMore, moveContact,
+    filters, setFilters, labels, refresh, lastRefresh, setLivePaused
+  } = useKanbanData();
   // Estado para notificações de erro/sucesso
   const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
@@ -43,8 +46,24 @@ function KanbanBoard() {
   const [pendingMove, setPendingMove] = useState(null);
   const requestMove = move => {
     const outcome = move.source !== move.destination ? stageOutcome(move.destination) : null;
-    if (outcome) setPendingMove({ ...move, outcome });
-    else performMove(move);
+    if (!outcome) {
+      performMove(move);
+      return;
+    }
+    // No ganho, pede o valor do negócio se o contato ainda não tem
+    const contact = board[move.source]?.contacts.find(c => c.id === move.contactId);
+    const askValue = outcome === 'won' && parseValue(contact?.custom_attributes?.[VALUE_ATTRIBUTE]) === null;
+    setPendingMove({ ...move, outcome, askValue });
+  };
+
+  // A atualização ao vivo fica pausada durante um arraste ou com o diálogo aberto
+  const draggingRef = useRef(false);
+  useEffect(() => {
+    setLivePaused(draggingRef.current || Boolean(pendingMove));
+  }, [pendingMove, setLivePaused]);
+  const onDragStart = () => {
+    draggingRef.current = true;
+    setLivePaused(true);
   };
 
   // Menu "Mover para…": vai para o topo da coluna de destino
@@ -55,6 +74,8 @@ function KanbanBoard() {
    * Handler do drag-and-drop: move o card e atualiza o valor do atributo no backend
    */
   const onDragEnd = ({ source, destination, draggableId }) => {
+    draggingRef.current = false;
+    setLivePaused(Boolean(pendingMove));
     if (!destination) return;
     const contact = board[source.droppableId]?.contacts[source.index];
     if (!contact || String(contact.id) !== draggableId) return;
@@ -121,7 +142,17 @@ function KanbanBoard() {
           ))}
         </select>
         </div>
-        {agent && <span className="text-sm text-gray-500">Conectado como {agent.name || agent.email}</span>}
+        <div className="flex items-center gap-3 text-sm text-gray-500">
+          {agent && <span>Conectado como {agent.name || agent.email}</span>}
+          {lastRefresh && (
+            <span title="O board é atualizado automaticamente">
+              Atualizado às {lastRefresh.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </span>
+          )}
+          <button type="button" onClick={refresh} className="text-blue-600 hover:underline" aria-label="Atualizar o board agora">
+            ↻ Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Contato da conversa aberta no Chatwoot */}
@@ -165,7 +196,7 @@ function KanbanBoard() {
         )}
       </div>
 
-      <DragDropContext onDragEnd={onDragEnd}>
+      <DragDropContext onDragStart={onDragStart} onDragEnd={onDragEnd}>
         <div className="flex gap-6 overflow-x-auto">
           {/* Renderiza cada coluna do Kanban, com "Não definido" na frente */}
           {columns.map(col => (
@@ -189,11 +220,12 @@ function KanbanBoard() {
           outcome={pendingMove.outcome}
           contactName={pendingMove.contactName}
           stageLabel={displayNames[pendingMove.destination] || pendingMove.destination}
+          askValue={pendingMove.askValue}
           onCancel={() => setPendingMove(null)}
-          onConfirm={reason => {
-            const { outcome, contactName, ...move } = pendingMove;
+          onConfirm={(reason, dealValue) => {
+            const { outcome, contactName, askValue, ...move } = pendingMove;
             setPendingMove(null);
-            performMove({ ...move, reason });
+            performMove({ ...move, reason, dealValue });
           }}
         />
       )}
