@@ -48,13 +48,14 @@ export function useDynamicKanbanData(reloadFlag = 0) {
     console.log('[DEBUG] Parâmetro atual da URL (kbw):', param);
     console.log('[DEBUG] Parâmetro anterior:', lastParamRef.current);
 
-    // Evita recarregar se o parâmetro 'kbw' não mudou
-    if (lastParamRef.current === param) {
-      console.log('[DEBUG] Parâmetro igual ao anterior, efeito abortado');
+    // Evita recarregar se nem o parâmetro 'kbw' nem o reloadFlag mudaram
+    const requestKey = `${param}|${reloadFlag}`;
+    if (lastParamRef.current === requestKey) {
+      console.log('[DEBUG] Parâmetro e reloadFlag iguais aos anteriores, efeito abortado');
       console.groupEnd();
       return;
     }
-    lastParamRef.current = param;
+    lastParamRef.current = requestKey;
 
     async function fetchData() {
       setLoading(true);
