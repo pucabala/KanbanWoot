@@ -30,14 +30,17 @@ export function useDynamicKanbanData(reloadFlag = 0) {
     return attribute.attribute_values || [];
   }, [attribute]);
 
-  // Memo para mapear displayNames dos atributos do tipo lista
+  // Todas as definições de atributos de contato (usadas para os nomes amigáveis nos cards)
+  const [attributeDefs, setAttributeDefs] = useState([]);
+
+  // Memo para mapear displayNames de todos os atributos de contato
   const displayNames = useMemo(() => {
     const map = {};
-    listAttributes.forEach(attr => {
+    attributeDefs.forEach(attr => {
       map[attr.attribute_key] = attr.attribute_display_name || attr.attribute_key;
     });
     return map;
-  }, [listAttributes]);
+  }, [attributeDefs]);
 
   useEffect(() => {
     // Extrai o parâmetro 'kbw' da URL
@@ -70,6 +73,7 @@ export function useDynamicKanbanData(reloadFlag = 0) {
 
         // Busca todos os atributos customizados do tipo 'contact_attribute'
         attrs = await getCustomAttributes();
+        setAttributeDefs(attrs);
         // Salva todos os atributos do tipo lista e com valores válidos para o dropdown
         const validListAttrs = attrs.filter(
           a => a.attribute_display_type === 'list' && a.attribute_values?.length
