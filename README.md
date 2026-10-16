@@ -47,10 +47,12 @@ Crie um arquivo `.env` na raiz do projeto com as credenciais da API do Chatwoot:
 
 ```env
 REACT_APP_CHATWOOT_TOKEN=seu_token_aqui
-REACT_APP_ACCOUNT_ID=1
-REACT_APP_API_URL=https://app.chatwoot.com
-REACT_APP_API_INBOX_ID=1
+REACT_APP_CHATWOOT_ACCOUNT_ID=1
+REACT_APP_CHATWOOT_URL=https://app.chatwoot.com
+REACT_APP_DEBUG=false
 ```
+
+> No Docker, as mesmas variáveis são passadas ao container e o `entrypoint.sh` gera o `.env.js` em tempo de execução. Localmente, os valores do `.env` têm prioridade sobre os de `public/.env.js`.
 
 ### ▶️ Rodar localmente
 

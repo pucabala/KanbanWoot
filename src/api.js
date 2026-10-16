@@ -1,7 +1,12 @@
 import { debugLog } from './debug';
 
-// Variáveis vindas do .env.js (runtime/Docker) com fallback para o .env do build
-const env = { ...process.env, ...(window._env_ || {}) };
+// Variáveis do .env (dev local) com fallback para o .env.js (runtime/Docker, onde o .env não entra no build)
+const runtimeEnv = window._env_ || {};
+const env = {
+  REACT_APP_CHATWOOT_URL: process.env.REACT_APP_CHATWOOT_URL || runtimeEnv.REACT_APP_CHATWOOT_URL,
+  REACT_APP_CHATWOOT_ACCOUNT_ID: process.env.REACT_APP_CHATWOOT_ACCOUNT_ID || runtimeEnv.REACT_APP_CHATWOOT_ACCOUNT_ID,
+  REACT_APP_CHATWOOT_TOKEN: process.env.REACT_APP_CHATWOOT_TOKEN || runtimeEnv.REACT_APP_CHATWOOT_TOKEN
+};
 const CHATWOOT_URL = (env.REACT_APP_CHATWOOT_URL || '').replace(/\/+$/, '');
 const ACCOUNT_ID = env.REACT_APP_CHATWOOT_ACCOUNT_ID;
 const chatwootHeaders = {
