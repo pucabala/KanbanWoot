@@ -55,11 +55,15 @@ export function useDynamicKanbanData(reloadFlag = 0) {
       console.groupEnd();
       return;
     }
+    // Recarga em segundo plano: mesmo atributo já carregado, apenas reloadFlag mudou
+    const isBackgroundReload = lastParamRef.current !== null && lastParamRef.current.startsWith(`${param}|`);
     lastParamRef.current = requestKey;
 
     async function fetchData() {
-      setLoading(true);
-      setError(null);
+      if (!isBackgroundReload) {
+        setLoading(true);
+        setError(null);
+      }
       try {
         let attrs = [];
         let selectedAttr = null;
@@ -118,6 +122,11 @@ export function useDynamicKanbanData(reloadFlag = 0) {
         }
 
       } catch (err) {
+        if (isBackgroundReload) {
+          // Mantém o board visível; apenas registra a falha da recarga
+          console.error('[DEBUG] Erro na recarga em segundo plano:', err);
+          return;
+        }
         setError(err);
         console.error('[DEBUG] Erro ao carregar dados:', err);
       } finally {
