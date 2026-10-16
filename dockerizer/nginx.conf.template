@@ -1,0 +1,48 @@
+# Gerado pelo entrypoint.sh via envsubst (${CHATWOOT_URL}, ${CHATWOOT_ACCOUNT_ID}, ${CHATWOOT_TOKEN}).
+server {
+    listen 3000;
+    server_name localhost;
+
+    location / {
+        root   /usr/share/nginx/html;
+        index  index.html index.htm;
+        try_files $uri $uri/ /index.html;
+    }
+
+    # O .env.js é gerado no start do container; não deve ficar em cache
+    location = /.env.js {
+        root   /usr/share/nginx/html;
+        add_header Cache-Control "no-store";
+    }
+
+    # Proxy para a API do Chatwoot: o token fica só no servidor.
+    # Apenas as rotas e métodos usados pelo KanbanWoot são liberados.
+    location = /chatwoot-api/contacts {
+        limit_except GET { deny all; }
+        include /etc/nginx/chatwoot-proxy.conf;
+    }
+
+    location = /chatwoot-api/custom_attribute_definitions {
+        limit_except GET { deny all; }
+        include /etc/nginx/chatwoot-proxy.conf;
+    }
+
+    location ~ ^/chatwoot-api/contacts/[0-9]+$ {
+        limit_except PUT { deny all; }
+        include /etc/nginx/chatwoot-proxy.conf;
+    }
+
+    location ~ ^/chatwoot-api/contacts/[0-9]+/destroy_custom_attributes$ {
+        limit_except POST { deny all; }
+        include /etc/nginx/chatwoot-proxy.conf;
+    }
+
+    location /chatwoot-api/ {
+        return 403;
+    }
+
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+}

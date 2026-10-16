@@ -57,7 +57,7 @@ REACT_APP_CHATWOOT_URL=https://app.chatwoot.com
 REACT_APP_DEBUG=false
 ```
 
-> No Docker, as mesmas variáveis são passadas ao container e o `entrypoint.sh` gera o `.env.js` em tempo de execução. Localmente, os valores do `.env` têm prioridade sobre os de `public/.env.js`.
+> O `.env` é só para desenvolvimento local: nesse modo o token vai para o navegador. No Docker, use as variáveis do container descritas em [Deploy com Docker](#-deploy-com-docker); lá o token fica só no servidor.
 
 ### ▶️ Rodar localmente
 
@@ -69,7 +69,9 @@ npm start
 
 ## 🛡️ Configuração do Chatwoot para uso externo (CORS/Easypanel)
 
-Para que o KanbanWoot consiga acessar a API do Chatwoot hospedado em outro domínio (ex: via Easypanel, Docker, etc), é necessário liberar o CORS no backend do Chatwoot.
+> **Só necessário no desenvolvimento local** (`npm start`). Com o Docker, o navegador fala apenas com o próprio KanbanWoot e o nginx repassa as chamadas ao Chatwoot, então não há CORS.
+
+Para que o KanbanWoot consiga acessar a API do Chatwoot hospedado em outro domínio, é necessário liberar o CORS no backend do Chatwoot.
 
 **Passo a passo:**
 
@@ -118,24 +120,29 @@ Assim, o Chatwoot aceitará conexões externas, facilitando a integração com o
 
 Este projeto está pronto para ser publicado via Docker.
 
-Exemplo de `Dockerfile` (já incluso no repositório):
+O `Dockerfile` incluso faz o build do React e serve os arquivos com nginx. O nginx também funciona como **proxy da API do Chatwoot**: o navegador chama `/chatwoot-api/...` e o nginx repassa para o Chatwoot adicionando o token. Assim o token **nunca chega ao navegador**.
 
-```dockerfile
-# build stage
-FROM node:18-alpine as build
-WORKDIR /app
-COPY package*.json ./
-RUN npm install
-COPY . .
-RUN npm run build
-
-# production stage
-FROM nginx:stable as production
-COPY --from=build /app/build /usr/share/nginx/html
-COPY ./dockerizer/nginx.conf /etc/nginx/conf.d/default.conf
-EXPOSE 3000
-CMD ["nginx", "-g", "daemon off;"]
+```bash
+docker build -t kanbanwoot .
+docker run -d -p 3000:3000 \
+  -e CHATWOOT_URL=https://app.chatwoot.com \
+  -e CHATWOOT_ACCOUNT_ID=1 \
+  -e CHATWOOT_TOKEN=seu_token_aqui \
+  kanbanwoot
 ```
+
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `CHATWOOT_URL` | sim | URL do Chatwoot (sem `/api/...`) |
+| `CHATWOOT_ACCOUNT_ID` | sim | ID numérico da conta |
+| `CHATWOOT_TOKEN` | sim | Token de acesso de um usuário do Chatwoot |
+| `REACT_APP_DEBUG` | não | `true` para logs de debug no console |
+
+Os nomes antigos (`REACT_APP_CHATWOOT_URL`, `REACT_APP_CHATWOOT_ACCOUNT_ID`, `REACT_APP_CHATWOOT_TOKEN`) continuam aceitos.
+
+O proxy libera apenas o que o KanbanWoot usa: listar contatos, listar definições de atributos, atualizar um contato e remover atributos de um contato. Qualquer outra rota ou método em `/chatwoot-api/` responde `403`.
+
+> ⚠️ **O KanbanWoot não tem login próprio.** Quem acessar a URL dele pode ver e alterar contatos usando o token configurado. Publique-o só em uma rede ou domínio restrito, ou coloque autenticação na frente (ex.: no proxy reverso do Easypanel). Prefira o token de um usuário com permissões mínimas.
 
 Acesse a aplicação na porta 3000 após o deploy.
 

@@ -12,8 +12,8 @@ FROM nginx:stable as production
 # Copia os arquivos do build React
 COPY --from=build /app/build /usr/share/nginx/html
 
-# Copia a configuração customizada do nginx
-COPY ./dockerizer/nginx.conf /etc/nginx/conf.d/default.conf
+# Templates do nginx (o entrypoint gera a configuração final com o proxy do Chatwoot)
+COPY ./dockerizer/nginx.conf.template ./dockerizer/chatwoot-proxy.conf.template /etc/nginx/templates-kbw/
 
 # Copia o script de entrypoint que injeta variáveis de ambiente
 COPY ./dockerizer/entrypoint.sh /entrypoint.sh
