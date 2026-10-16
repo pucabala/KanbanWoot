@@ -13,6 +13,8 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 - 🎨 UI moderna com Tailwind CSS
 - 🏷️ Suporte a múltiplos atributos customizados do tipo lista (dropdown para seleção do atributo)
 - 🗂️ Coluna especial "Não definido" para contatos sem valor definido no atributo
+- ✅ Filtro opcional: se existir um atributo de contato `kanbanwoot` (tipo caixa de seleção), só os contatos marcados com ele aparecem no board
+- 🍪 Lembra o último atributo escolhido (cookie `kbw`) quando a URL não traz `?kbw=`
 - 📝 Exibição dos nomes amigáveis dos atributos e valores (display_name)
 - 🖱️ Atualização do estágio do contato ao arrastar (remove a chave do atributo ao mover para "Não definido")
 - 🔄 Movimentação otimista: o card muda de coluna na hora e volta se a API recusar

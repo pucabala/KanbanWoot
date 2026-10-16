@@ -58,17 +58,27 @@ debugLog('api.js: módulo carregado');
 // Coluna especial para contatos sem valor no atributo selecionado
 export const UNASSIGNED_STAGE = 'Não definido';
 
+// Atributo opcional: se existir na conta, só contatos com kanbanwoot = true entram no board
+export const KANBANWOOT_FLAG_KEY = 'kanbanwoot';
+
 // Retorna uma página dos contatos de uma coluna (valor do atributo), filtrando no servidor.
 // Para UNASSIGNED_STAGE, busca contatos sem valor no atributo.
-export async function getContactsByStage(attributeKey, stage, page = 1) {
-  debugLog('api.js: getContactsByStage chamado', attributeKey, stage, page);
-  const filter = stage === UNASSIGNED_STAGE
-    ? { attribute_key: attributeKey, filter_operator: 'is_not_present', values: [], query_operator: null }
-    : { attribute_key: attributeKey, filter_operator: 'equal_to', values: [stage], query_operator: null };
+// onlyFlagged: aplica também o filtro kanbanwoot = true.
+export async function getContactsByStage(attributeKey, stage, page = 1, { onlyFlagged = false } = {}) {
+  debugLog('api.js: getContactsByStage chamado', attributeKey, stage, page, { onlyFlagged });
+  const filters = [];
+  if (onlyFlagged) {
+    filters.push({ attribute_key: KANBANWOOT_FLAG_KEY, filter_operator: 'equal_to', values: [true] });
+  }
+  filters.push(stage === UNASSIGNED_STAGE
+    ? { attribute_key: attributeKey, filter_operator: 'is_not_present', values: [] }
+    : { attribute_key: attributeKey, filter_operator: 'equal_to', values: [stage] });
+  // Chatwoot: cada filtro liga ao próximo por query_operator; o último leva null
+  const payload = filters.map((f, i) => ({ ...f, query_operator: i < filters.length - 1 ? 'and' : null }));
   try {
     const data = await chatwootFetch(`/contacts/filter?page=${page}`, {
       method: 'POST',
-      body: JSON.stringify({ payload: [filter] })
+      body: JSON.stringify({ payload })
     });
     const contacts = data?.payload || [];
     const count = typeof data?.meta?.count === 'number' ? data.meta.count : null;
