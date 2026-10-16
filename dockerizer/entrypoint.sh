@@ -11,11 +11,16 @@ CHATWOOT_URL="${CHATWOOT_URL:-$REACT_APP_CHATWOOT_URL}"
 CHATWOOT_TOKEN="${CHATWOOT_TOKEN:-$REACT_APP_CHATWOOT_TOKEN}"
 CHATWOOT_ACCOUNT_ID="${CHATWOOT_ACCOUNT_ID:-$REACT_APP_CHATWOOT_ACCOUNT_ID}"
 DEBUG="${REACT_APP_DEBUG:-false}"
+# Dias na mesma etapa até o card ser marcado como parado
+STALE_DAYS="${KANBANWOOT_STALE_DAYS:-7}"
 # Subcaminho em que o app é publicado sem remover o prefixo (ex.: /kanban); vazio = raiz
 BASE_PATH="${KANBANWOOT_BASE_PATH%/}"
 
 # Remove barra final da URL
 CHATWOOT_URL="${CHATWOOT_URL%/}"
+# URL do Chatwoot vista pelo navegador (links "abrir no Chatwoot"); padrão: CHATWOOT_URL
+CHATWOOT_PUBLIC_URL="${CHATWOOT_PUBLIC_URL:-$CHATWOOT_URL}"
+CHATWOOT_PUBLIC_URL="${CHATWOOT_PUBLIC_URL%/}"
 
 case "$AUTH_MODE" in
   proxy) required="CHATWOOT_URL CHATWOOT_TOKEN CHATWOOT_ACCOUNT_ID" ;;
@@ -33,6 +38,9 @@ if [ -n "$missing" ]; then
 fi
 case "$CHATWOOT_ACCOUNT_ID" in
   *[!0-9]*) echo "Erro: CHATWOOT_ACCOUNT_ID deve ser numérico" >&2; exit 1 ;;
+esac
+case "$STALE_DAYS" in
+  ''|*[!0-9]*) echo "Erro: KANBANWOOT_STALE_DAYS deve ser um número de dias" >&2; exit 1 ;;
 esac
 if [ -n "$BASE_PATH" ] && ! echo "$BASE_PATH" | grep -Eq '^(/[A-Za-z0-9_-]+)+$'; then
   echo "Erro: KANBANWOOT_BASE_PATH deve ser como /kanban" >&2
@@ -69,6 +77,8 @@ cat <<JS > "$ENV_FILE"
 window._env_ = {
 $PROXY_LINE
   REACT_APP_CHATWOOT_ACCOUNT_ID: "${CHATWOOT_ACCOUNT_ID}",
+  REACT_APP_CHATWOOT_PUBLIC_URL: "${CHATWOOT_PUBLIC_URL}",
+  REACT_APP_STALE_DAYS: "${STALE_DAYS}",
   REACT_APP_DEBUG: "${DEBUG}"
 };
 JS

@@ -1,6 +1,6 @@
 // KanbanBoard.jsx
 // Componente principal do Kanban dinâmico
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
 import Notification from './Notification';
 import ErrorMessage from './ErrorMessage';
@@ -11,11 +11,31 @@ import { CHATWOOT_LOGIN_URL } from '../api';
 
 function KanbanBoard() {
   // Colunas carregadas página a página, filtradas no servidor
-  const { agent, board, columns, attribute, loading, error, listAttributes, displayNames, loadMore, moveContact } = useKanbanData();
+  const { agent, board, columns, attribute, loading, error, listAttributes, displayNames, loadMore, moveContact, filters, setFilters, labels } = useKanbanData();
   // Estado para notificações de erro/sucesso
   const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Busca com atraso para não refazer as buscas a cada tecla
+  const [searchText, setSearchText] = useState(filters.search);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setFilters(f => (f.search === searchText.trim() ? f : { ...f, search: searchText.trim() }));
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [searchText, setFilters]);
+  const hasFilters = Boolean(filters.search || filters.label || searchText);
+
+  // Move pelo menu "Mover para…": vai para o topo da coluna de destino
+  const moveFromMenu = async (contact, sourceIndex, source, destination) => {
+    try {
+      await moveContact({ contactId: contact.id, source, destination, sourceIndex, destinationIndex: 0 });
+    } catch (err) {
+      setNotification({ type: 'error', message: `Erro ao atualizar estágio: ${err?.message || err}` });
+      console.error('[KanbanBoard] Falha ao atualizar estágio:', err);
+    }
+  };
 
   /**
    * Handler do drag-and-drop: move o card e atualiza o valor do atributo no backend
@@ -87,6 +107,38 @@ function KanbanBoard() {
         {agent && <span className="text-sm text-gray-500">Conectado como {agent.name || agent.email}</span>}
       </div>
 
+      {/* Busca e filtros */}
+      <div className="mb-4 flex flex-wrap items-center gap-2" role="search">
+        <input
+          type="search"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          placeholder="Buscar por nome, telefone ou e-mail"
+          aria-label="Buscar contatos"
+          className="border border-gray-300 rounded p-2 w-72 max-w-full"
+        />
+        {labels.length > 0 && (
+          <select
+            value={filters.label}
+            onChange={e => setFilters(f => ({ ...f, label: e.target.value }))}
+            aria-label="Filtrar por etiqueta"
+            className="border border-gray-300 rounded p-2"
+          >
+            <option value="">Todas as etiquetas</option>
+            {labels.map(label => <option key={label} value={label}>{label}</option>)}
+          </select>
+        )}
+        {hasFilters && (
+          <button
+            type="button"
+            className="text-sm text-blue-600 hover:underline"
+            onClick={() => { setSearchText(''); setFilters({ search: '', label: '' }); }}
+          >
+            Limpar filtros
+          </button>
+        )}
+      </div>
+
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-6 overflow-x-auto">
           {/* Renderiza cada coluna do Kanban, com "Não definido" na frente */}
@@ -96,6 +148,9 @@ function KanbanBoard() {
               stage={col}
               column={board[col]}
               onLoadMore={() => loadMore(col)}
+              onMoveCard={(contact, index, destination) => moveFromMenu(contact, index, col, destination)}
+              stages={columns}
+              attributeKey={attribute.attribute_key}
               attrDisplayNames={displayNames}
             />
           ))}

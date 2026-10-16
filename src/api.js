@@ -10,6 +10,13 @@ const env = {
 const CHATWOOT_URL = (env.REACT_APP_CHATWOOT_URL || '').replace(/\/+$/, '');
 const ACCOUNT_ID = env.REACT_APP_CHATWOOT_ACCOUNT_ID;
 
+// Dias na mesma etapa até o card ser marcado como parado (metade disso: atenção)
+export const STALE_DAYS = Number(process.env.REACT_APP_STALE_DAYS || runtimeEnv.REACT_APP_STALE_DAYS) || 7;
+
+// Sufixo do atributo que guarda quando o contato entrou na etapa atual (ex.: kbw_funil_desde)
+export const STAGE_SINCE_SUFFIX = '_desde';
+export const stageSinceKey = attributeKey => `${attributeKey}${STAGE_SINCE_SUFFIX}`;
+
 // Modos de autenticação:
 // - 'session': o KanbanWoot é servido no mesmo domínio do Chatwoot e usa a sessão do agente logado
 // - 'proxy':   (Docker) o nginx do KanbanWoot repassa as chamadas e injeta o token de serviço
@@ -25,6 +32,15 @@ const SESSION_HEADER_KEYS = ['access-token', 'token-type', 'client', 'expiry', '
 
 // Endereço da tela de login do Chatwoot (modo sessão: mesmo domínio)
 export const CHATWOOT_LOGIN_URL = '/app/login';
+
+// Link para o contato no painel do Chatwoot (null se a URL pública do Chatwoot não for conhecida)
+export function getChatwootContactUrl(contactId) {
+  const base = AUTH_MODE === 'session'
+    ? ''
+    : (process.env.REACT_APP_CHATWOOT_URL || runtimeEnv.REACT_APP_CHATWOOT_PUBLIC_URL || '').replace(/\/+$/, '');
+  if (AUTH_MODE !== 'session' && !base) return null;
+  return `${base}/app/accounts/${ACCOUNT_ID}/contacts/${contactId}`;
+}
 
 function notLoggedInError() {
   const error = new Error('Você não está logado no Chatwoot.');
@@ -122,11 +138,18 @@ export const KANBANWOOT_FLAG_KEY = 'kanbanwoot';
 // Retorna uma página dos contatos de uma coluna (valor do atributo), filtrando no servidor.
 // Para UNASSIGNED_STAGE, busca contatos sem valor no atributo.
 // onlyFlagged: aplica também o filtro kanbanwoot = true.
-export async function getContactsByStage(attributeKey, stage, page = 1, { onlyFlagged = false } = {}) {
-  debugLog('api.js: getContactsByStage chamado', attributeKey, stage, page, { onlyFlagged });
+// search: texto buscado no nome, telefone (se tiver dígitos) ou e-mail (se tiver @).
+// label: etiqueta do contato.
+export async function getContactsByStage(attributeKey, stage, page = 1, { onlyFlagged = false, search = '', label = '' } = {}) {
+  debugLog('api.js: getContactsByStage chamado', attributeKey, stage, page, { onlyFlagged, search, label });
   const filters = [];
   if (onlyFlagged) {
     filters.push({ attribute_key: KANBANWOOT_FLAG_KEY, filter_operator: 'equal_to', values: [true] });
+  }
+  const searchFilter = buildSearchFilter(search);
+  if (searchFilter) filters.push(searchFilter);
+  if (label) {
+    filters.push({ attribute_key: 'labels', filter_operator: 'equal_to', values: [label] });
   }
   filters.push(stage === UNASSIGNED_STAGE
     ? { attribute_key: attributeKey, filter_operator: 'is_not_present', values: [] }
@@ -145,6 +168,26 @@ export async function getContactsByStage(attributeKey, stage, page = 1, { onlyFl
     debugLog('Erro ao buscar contatos da coluna:', error);
     throw error;
   }
+}
+
+// O filtro do Chatwoot só encadeia condições (sem parênteses), então a busca usa um campo só:
+// e-mail se tiver @, telefone se for só dígitos/símbolos de telefone, senão nome
+function buildSearchFilter(search) {
+  const text = (search || '').trim();
+  if (!text) return null;
+  if (text.includes('@')) return { attribute_key: 'email', filter_operator: 'contains', values: [text] };
+  if (/^[\d\s()+.-]+$/.test(text) && /\d/.test(text)) {
+    return { attribute_key: 'phone_number', filter_operator: 'contains', values: [text.replace(/[^\d+]/g, '')] };
+  }
+  return { attribute_key: 'name', filter_operator: 'contains', values: [text] };
+}
+
+// Retorna as etiquetas da conta (para o filtro)
+export async function getLabels() {
+  debugLog('api.js: getLabels chamado');
+  const data = await chatwootFetch('/labels');
+  const all = data?.payload || data || [];
+  return Array.isArray(all) ? all.map(l => l.title).filter(Boolean) : [];
 }
 
 // Retorna todos os atributos customizados (lista) apenas do tipo contact_attribute
@@ -177,18 +220,13 @@ export async function getCustomAttributeById(id) {
   }
 }
 
-// Atualiza o valor de um atributo customizado do contato
-export async function updateContactCustomAttribute(contactId, attributeKey, value) {
-  debugLog('api.js: updateContactCustomAttribute chamado', contactId, attributeKey, value);
-  try {
-    return await chatwootFetch(`/contacts/${contactId}`, {
-      method: 'PUT',
-      body: JSON.stringify({ custom_attributes: { [attributeKey]: value } })
-    });
-  } catch (error) {
-    debugLog('Erro ao atualizar atributo customizado:', error);
-    throw error;
-  }
+// Atualiza vários atributos customizados do contato de uma vez (o Chatwoot mescla com os existentes)
+export async function updateContactCustomAttributes(contactId, attributes) {
+  debugLog('api.js: updateContactCustomAttributes chamado', contactId, attributes);
+  return chatwootFetch(`/contacts/${contactId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ custom_attributes: attributes })
+  });
 }
 
 // Remove atributos customizados do contato
