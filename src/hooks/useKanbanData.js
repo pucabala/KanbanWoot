@@ -1,225 +1,148 @@
-import { useEffect, useState, useRef, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { getContacts, getCustomAttributes, updateContactCustomAttribute, removeContactCustomAttributes } from '../api';
+import {
+  getContactsByStage,
+  getCustomAttributes,
+  updateContactCustomAttribute,
+  removeContactCustomAttributes,
+  UNASSIGNED_STAGE
+} from '../api';
+import { kanbanReducer } from '../reducers/kanbanReducer';
 
-export function useDynamicKanbanData(reloadFlag = 0) {
+// Escolhe o atributo: parâmetro ?kbw= da URL, depois o primeiro lista "kbw_", depois qualquer lista
+function selectAttribute(attrs, param) {
+  const lists = attrs.filter(a => a.attribute_display_type === 'list' && a.attribute_values?.length);
+  return (
+    (param && lists.find(a => a.attribute_key === param)) ||
+    lists.find(a => a.attribute_key.startsWith('kbw_')) ||
+    lists[0] ||
+    null
+  );
+}
+
+export function useKanbanData() {
   const location = useLocation();
+  const param = new URLSearchParams(location.search).get('kbw');
 
-  // Estado para armazenar contatos filtrados (com atributos que começam com 'kbw_' e não nulos)
-  const [contacts, setContacts] = useState([]);
-
-  // Estado para armazenar o atributo customizado atual (guardando só campos essenciais)
-  const [attribute, setAttribute] = useState(null);
-
-  // Estado para armazenar todos os atributos do tipo lista (para dropdown)
-  const [listAttributes, setListAttributes] = useState([]);
-
-  // Estados para controle de carregamento e erros
+  // Definições de atributos de contato (dropdown e nomes amigáveis)
+  // null até a primeira resposta da API
+  const [attributeDefs, setAttributeDefs] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Refs para armazenar o último parâmetro da URL e o último atributo selecionado
-  const lastParamRef = useRef(null);
-  const lastAttributeKeyRef = useRef(null);
+  // Colunas e seus contatos, carregados página a página
+  const [board, dispatch] = useReducer(kanbanReducer, {});
+  const boardRef = useRef(board);
+  boardRef.current = board;
 
-  // Memoização das colunas para evitar re-renderizações desnecessárias
-  // Colunas são os valores do atributo customizado (tipo lista)
-  const columns = useMemo(() => {
-    if (!attribute) return [];
-    return attribute.attribute_values || [];
-  }, [attribute]);
+  // Incrementa a cada troca de atributo para descartar respostas de buscas antigas
+  const generationRef = useRef(0);
+  // Colunas com busca em andamento (evita pedir a mesma página duas vezes antes do re-render)
+  const inFlightRef = useRef(new Set());
 
-  // Todas as definições de atributos de contato (usadas para os nomes amigáveis nos cards)
-  const [attributeDefs, setAttributeDefs] = useState([]);
+  // Busca as definições de atributos uma única vez
+  useEffect(() => {
+    let active = true;
+    getCustomAttributes()
+      .then(attrs => { if (active) setAttributeDefs(attrs); })
+      .catch(err => { if (active) { setError(err); setLoading(false); } });
+    return () => { active = false; };
+  }, []);
 
-  // Memo para mapear displayNames de todos os atributos de contato
+  const listAttributes = useMemo(
+    () => (attributeDefs || []).filter(a => a.attribute_display_type === 'list' && a.attribute_values?.length),
+    [attributeDefs]
+  );
+
+  const attribute = useMemo(() => {
+    const selected = selectAttribute(attributeDefs || [], param);
+    return selected
+      ? { attribute_key: selected.attribute_key, attribute_values: selected.attribute_values }
+      : null;
+  }, [attributeDefs, param]);
+
   const displayNames = useMemo(() => {
     const map = {};
-    attributeDefs.forEach(attr => {
+    (attributeDefs || []).forEach(attr => {
       map[attr.attribute_key] = attr.attribute_display_name || attr.attribute_key;
     });
     return map;
   }, [attributeDefs]);
 
-  useEffect(() => {
-    // Extrai o parâmetro 'kbw' da URL
-    const searchParams = new URLSearchParams(location.search);
-    const param = searchParams.get('kbw');
+  const attributeKey = attribute?.attribute_key;
+  const columns = useMemo(
+    () => (attribute ? [UNASSIGNED_STAGE, ...attribute.attribute_values] : []),
+    [attribute]
+  );
 
-    console.group('[DEBUG] useDynamicKanbanData: Efeito disparado');
-    console.log('[DEBUG] Parâmetro atual da URL (kbw):', param);
-    console.log('[DEBUG] Parâmetro anterior:', lastParamRef.current);
-
-    // Evita recarregar se nem o parâmetro 'kbw' nem o reloadFlag mudaram
-    const requestKey = `${param}|${reloadFlag}`;
-    if (lastParamRef.current === requestKey) {
-      console.log('[DEBUG] Parâmetro e reloadFlag iguais aos anteriores, efeito abortado');
-      console.groupEnd();
-      return;
-    }
-    // Recarga em segundo plano: mesmo atributo já carregado, apenas reloadFlag mudou
-    const isBackgroundReload = lastParamRef.current !== null && lastParamRef.current.startsWith(`${param}|`);
-    lastParamRef.current = requestKey;
-
-    async function fetchData() {
-      if (!isBackgroundReload) {
-        setLoading(true);
-        setError(null);
-      }
-      try {
-        let attrs = [];
-        let selectedAttr = null;
-
-        // Busca todos os atributos customizados do tipo 'contact_attribute'
-        attrs = await getCustomAttributes();
-        setAttributeDefs(attrs);
-        // Salva todos os atributos do tipo lista e com valores válidos para o dropdown
-        const validListAttrs = attrs.filter(
-          a => a.attribute_display_type === 'list' && a.attribute_values?.length
-        );
-        setListAttributes(validListAttrs);
-        console.log('[DEBUG] Atributos carregados:', attrs.map(a => a.attribute_key));
-
-        // Seleciona o atributo conforme o parâmetro exato da URL, se existir
-        if (param) {
-          selectedAttr = attrs.find(
-            a => a.attribute_display_type === 'list' && a.attribute_key === param
-          );
-          console.log('[DEBUG] Atributo selecionado via parâmetro:', selectedAttr?.attribute_key);
-        }
-
-        // Se não encontrou pelo parâmetro, tenta pegar o primeiro atributo do tipo lista que comece com "kbw_"
-        if (!selectedAttr) {
-          selectedAttr = attrs.find(
-            a => a.attribute_display_type === 'list' && a.attribute_key.startsWith('kbw_')
-          );
-          console.log('[DEBUG] Atributo selecionado por fallback (kbw_):', selectedAttr?.attribute_key);
-        }
-
-        // Se ainda não encontrou, pega o primeiro atributo do tipo lista disponível
-        if (!selectedAttr) {
-          selectedAttr = attrs.find(a => a.attribute_display_type === 'list');
-          console.log('[DEBUG] Atributo selecionado por fallback (qualquer lista):', selectedAttr?.attribute_key);
-        }
-
-        // Se não achou nenhum atributo do tipo lista, lança erro
-        if (!selectedAttr) throw new Error('Nenhum atributo tipo lista encontrado.');
-
-        // Busca todos os contatos
-        const contactsData = await getContacts();
-
-        // Traz todos os contatos, sem filtrar por atributos kbw_
-        setContacts(contactsData);
-
-        // Atualiza o estado do atributo apenas se o atributo selecionado mudou
-        if (lastAttributeKeyRef.current !== selectedAttr.attribute_key) {
-          // Guarda só os campos essenciais para evitar problemas e re-render desnecessário
-          setAttribute({
-            attribute_key: selectedAttr.attribute_key,
-            attribute_values: selectedAttr.attribute_values
-          });
-          lastAttributeKeyRef.current = selectedAttr.attribute_key;
-          console.log('[DEBUG] Estado attribute atualizado!');
-        } else {
-          console.log('[DEBUG] Atributo igual ao anterior, estado attribute não atualizado. Apenas contatos atualizados.');
-        }
-
-      } catch (err) {
-        if (isBackgroundReload) {
-          // Mantém o board visível; apenas registra a falha da recarga
-          console.error('[DEBUG] Erro na recarga em segundo plano:', err);
-          return;
-        }
-        setError(err);
-        console.error('[DEBUG] Erro ao carregar dados:', err);
-      } finally {
-        setLoading(false);
-        console.groupEnd();
-      }
-    }
-
-    fetchData();
-  }, [location.search, reloadFlag]);
-
-  // Retorna os dados e estados do hook para o componente consumir
-  return { contacts, columns, attribute, listAttributes, displayNames, loading, error };
-}
-
-// Hook para atualização de atributo customizado de contato
-export function useUpdateContactAttribute(onSuccess, attribute) {
-  const [updating, setUpdating] = useState(false);
-  const [updateError, setUpdateError] = useState(null);
-
-  // Função para atualizar atributo customizado no backend
-  const updateContactAttribute = async (contactId, attributeKey, value) => {
-    // Se o valor for undefined, apaga a chave do atributo customizado
-    if (typeof value === 'undefined') {
-      setUpdating(true);
-      setUpdateError(null);
-      try {
-        await removeContactCustomAttributes(contactId, [attributeKey]);
-        if (typeof onSuccess === 'function') {
-          onSuccess();
-        }
-      } catch (error) {
-        setUpdateError(error);
-        console.error('[DEBUG] Erro ao remover atributo do contato:', error);
-        throw error;
-      } finally {
-        setUpdating(false);
-      }
-      return;
-    }
-    // Validação: valor deve ser um dos valores válidos da coluna
-    if (typeof value !== 'undefined' && (!Array.isArray(attribute?.attribute_values) || !attribute.attribute_values.includes(value))) {
-      const errMsg = `[DEBUG] Valor inválido para coluna: "${value}". Valores permitidos: ${JSON.stringify(attribute?.attribute_values)}`;
-      setUpdateError(new Error(errMsg));
-      console.error(errMsg);
-      throw new Error(errMsg);
-    }
-    setUpdating(true);
-    setUpdateError(null);
+  // Carrega a próxima página de uma coluna
+  const loadMore = useCallback(async (stage) => {
+    const col = boardRef.current[stage];
+    if (!attributeKey || !col || col.loading || !col.hasMore || inFlightRef.current.has(stage)) return;
+    inFlightRef.current.add(stage);
+    const generation = generationRef.current;
+    const page = col.page + 1;
+    dispatch({ type: 'STAGE_LOADING', payload: { stage } });
     try {
-      await updateContactCustomAttribute(contactId, attributeKey, value);
-      if (typeof onSuccess === 'function') {
-        onSuccess(); // Chama callback de sucesso para recarregar dados
-      }
-    } catch (error) {
-      setUpdateError(error);
-      console.error('[DEBUG] Erro ao atualizar atributo do contato:', error);
-      throw error;
+      const { contacts, count } = await getContactsByStage(attributeKey, stage, page);
+      if (generation !== generationRef.current) return;
+      dispatch({ type: 'STAGE_LOADED', payload: { stage, page, contacts, count } });
+    } catch (err) {
+      if (generation !== generationRef.current) return;
+      console.error('[DEBUG] Erro ao carregar coluna:', stage, err);
+      dispatch({ type: 'STAGE_ERROR', payload: { stage, error: err } });
     } finally {
-      setUpdating(false);
+      if (generation === generationRef.current) inFlightRef.current.delete(stage);
     }
-  };
+  }, [attributeKey]);
 
-  return { updateContactAttribute, updating, updateError };
-}
+  // Ao trocar de atributo: zera o board e carrega a 1ª página de cada coluna em paralelo
+  useEffect(() => {
+    if (!attributeDefs) return;
+    if (!attributeKey) {
+      setLoading(false);
+      return;
+    }
+    generationRef.current += 1;
+    inFlightRef.current = new Set();
+    dispatch({ type: 'RESET', payload: columns });
+    // boardRef é atualizado no próximo render; prepara o estado para o loadMore já agora
+    boardRef.current = kanbanReducer({}, { type: 'RESET', payload: columns });
+    setLoading(false);
+    columns.forEach(stage => loadMore(stage));
+  }, [attributeDefs, attributeKey, columns, loadMore]);
 
-// Hook combinado para facilitar o consumo no componente
-export function useKanbanData() {
-  // Estado para forçar recarregamento dos dados do Kanban
-  const [reloadFlag, setReloadFlag] = useState(0);
+  // Move um card: atualização otimista, desfeita se a API falhar
+  const moveContact = useCallback(async ({ contactId, source, destination, sourceIndex, destinationIndex }) => {
+    if (source === destination) {
+      dispatch({ type: 'MOVE_CARD', payload: { source, destination, contactId, index: destinationIndex } });
+      return;
+    }
+    const contact = boardRef.current[source]?.contacts.find(c => c.id === contactId);
+    const previousValue = contact?.custom_attributes?.[attributeKey];
+    const value = destination === UNASSIGNED_STAGE ? undefined : destination;
+    if (typeof value !== 'undefined' && !attribute.attribute_values.includes(value)) {
+      throw new Error(`Valor inválido para coluna: "${value}"`);
+    }
+    dispatch({
+      type: 'MOVE_CARD',
+      payload: { source, destination, contactId, index: destinationIndex, attributeKey, value }
+    });
+    try {
+      if (typeof value === 'undefined') {
+        await removeContactCustomAttributes(contactId, [attributeKey]);
+      } else {
+        await updateContactCustomAttribute(contactId, attributeKey, value);
+      }
+    } catch (err) {
+      dispatch({
+        type: 'MOVE_CARD',
+        payload: { source: destination, destination: source, contactId, index: sourceIndex, attributeKey, value: previousValue }
+      });
+      throw err;
+    }
+  }, [attribute, attributeKey]);
 
-  // Passa reloadFlag como dependência para o hook de dados
-  const { contacts, columns, attribute, listAttributes, displayNames, loading, error } = useDynamicKanbanData(reloadFlag);
-  // Função para forçar reload
-  const reloadKanban = () => setReloadFlag(f => f + 1);
-  // Passa reloadKanban como callback de sucesso para o update e passa attribute para validação
-  const { updateContactAttribute, updating, updateError } = useUpdateContactAttribute(reloadKanban, attribute);
-
-  return {
-    contacts,
-    columns,
-    attribute,
-    listAttributes,
-    displayNames,
-    loading,
-    error,
-    updateContactAttribute,
-    updating,
-    updateError,
-    reloadKanban // expõe função para reload manual se necessário
-  };
+  return { board, columns, attribute, listAttributes, displayNames, loading, error, loadMore, moveContact };
 }

@@ -17,8 +17,8 @@ server {
 
     # Proxy para a API do Chatwoot: o token fica só no servidor.
     # Apenas as rotas e métodos usados pelo KanbanWoot são liberados.
-    location = /chatwoot-api/contacts {
-        limit_except GET { deny all; }
+    location = /chatwoot-api/contacts/filter {
+        limit_except POST { deny all; }
         include /etc/nginx/chatwoot-proxy.conf;
     }
 

@@ -1,34 +1,82 @@
 // kanbanReducer.js
 
 /**
- * Reduz o estado das colunas do Kanban com base na ação recebida.
- *
- * @param {Object} state Estado atual das colunas (ex: { "Novo": [contatos], "Fechado": [contatos] })
- * @param {{ type: string, payload: any }} action Ação a ser processada
- * @returns {Object} Novo estado atualizado
+ * Estado das colunas do Kanban, uma entrada por coluna:
+ * { [stage]: { contacts: [], page: 0, count: null, hasMore: true, loading: false, error: null } }
  */
+export function emptyStage() {
+  return { contacts: [], page: 0, count: null, hasMore: true, loading: false, error: null };
+}
+
 export function kanbanReducer(state, action) {
   switch (action.type) {
-    case 'INIT': {
-      return typeof action.payload === 'object' && action.payload !== null
-        ? action.payload
-        : state;
+    case 'RESET': {
+      // payload: lista de colunas
+      return action.payload.reduce((acc, stage) => {
+        acc[stage] = emptyStage();
+        return acc;
+      }, {});
+    }
+
+    case 'STAGE_LOADING': {
+      const { stage } = action.payload;
+      if (!state[stage]) return state;
+      return { ...state, [stage]: { ...state[stage], loading: true, error: null } };
+    }
+
+    case 'STAGE_LOADED': {
+      const { stage, page, contacts, count } = action.payload;
+      const current = state[stage];
+      if (!current) return state;
+      // Evita duplicados (a lista pode mudar entre páginas) e cards que já estão em outra coluna
+      const elsewhere = new Set();
+      Object.entries(state).forEach(([s, col]) => {
+        if (s !== stage) col.contacts.forEach(c => elsewhere.add(c.id));
+      });
+      const seen = new Set(current.contacts.map(c => c.id));
+      const fresh = contacts.filter(c => !seen.has(c.id) && !elsewhere.has(c.id));
+      const merged = [...current.contacts, ...fresh];
+      const hasMore = contacts.length > 0 && (count === null || merged.length < count);
+      return {
+        ...state,
+        [stage]: { ...current, contacts: merged, page, count, hasMore, loading: false, error: null }
+      };
+    }
+
+    case 'STAGE_ERROR': {
+      const { stage, error } = action.payload;
+      if (!state[stage]) return state;
+      return { ...state, [stage]: { ...state[stage], loading: false, error } };
     }
 
     case 'MOVE_CARD': {
-      const { source, destination, contact } = action.payload;
-
-      const newState = {
+      // attributeKey/value: atualiza o atributo no card (value undefined remove a chave)
+      const { source, destination, contactId, index, attributeKey, value } = action.payload;
+      const from = state[source];
+      const to = state[destination];
+      if (!from || !to) return state;
+      const original = from.contacts.find(c => c.id === contactId);
+      if (!original) return state;
+      const customAttributes = { ...(original.custom_attributes || {}) };
+      if (attributeKey) {
+        if (typeof value === 'undefined') delete customAttributes[attributeKey];
+        else customAttributes[attributeKey] = value;
+      }
+      const contact = { ...original, custom_attributes: customAttributes };
+      if (source === destination) {
+        const list = from.contacts.filter(c => c.id !== contactId);
+        list.splice(index, 0, contact);
+        return { ...state, [source]: { ...from, contacts: list } };
+      }
+      const destList = [...to.contacts];
+      destList.splice(index, 0, contact);
+      const dec = n => (typeof n === 'number' ? Math.max(0, n - 1) : n);
+      const inc = n => (typeof n === 'number' ? n + 1 : n);
+      return {
         ...state,
-        [source]: [...(state[source] || [])],
-        [destination]: [...(state[destination] || [])],
+        [source]: { ...from, contacts: from.contacts.filter(c => c.id !== contactId), count: dec(from.count) },
+        [destination]: { ...to, contacts: destList, count: inc(to.count) }
       };
-
-      newState[source] = newState[source].filter(c => c.id !== contact.id);
-      newState[destination] = newState[destination].filter(c => c.id !== contact.id);
-      newState[destination].push(contact);
-
-      return newState;
     }
 
     default:
