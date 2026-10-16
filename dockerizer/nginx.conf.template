@@ -25,6 +25,11 @@ server {
         include /etc/nginx/chatwoot-proxy.conf;
     }
 
+    location = /chatwoot-api/labels {
+        limit_except GET { deny all; }
+        include /etc/nginx/chatwoot-proxy.conf;
+    }
+
     location = /chatwoot-api/custom_attribute_definitions {
         limit_except GET { deny all; }
         include /etc/nginx/chatwoot-proxy.conf;

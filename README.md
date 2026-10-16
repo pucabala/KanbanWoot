@@ -9,7 +9,10 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 - 🗂️ Colunas definidas pelos valores de qualquer atributo de contato do tipo lista, mais a coluna "Não definido" para quem não tem valor
 - 🏷️ Dropdown para trocar de atributo; o último escolhido fica salvo em cookie
 - 📥 Cada coluna busca só os seus contatos no Chatwoot (filtro no servidor), 15 por vez, carregando mais ao rolar; o total aparece no topo da coluna
-- 🧲 Arrastar e soltar para mudar o contato de etapa (`@hello-pangea/dnd`)
+- 🧲 Arrastar e soltar para mudar o contato de etapa (`@hello-pangea/dnd`), ou pelo menu "Mover para…" do card (teclado e celular)
+- 🔎 Busca por nome, telefone ou e-mail e filtro por etiqueta
+- ⏱️ Tempo na etapa em cada card, com destaque para os parados há mais de N dias
+- ↗️ Link para abrir o contato no Chatwoot
 - ⚡ Movimentação otimista: o card muda de coluna na hora e volta, com aviso, se a API recusar
 - ✅ Filtro opcional pelo atributo `kanbanwoot` para escolher quais contatos entram no board
 - 📝 Nomes amigáveis (display name) dos atributos e dos atributos `kbw_*` mostrados nos cards
@@ -40,9 +43,19 @@ O board usa um atributo de contato do tipo **lista**; cada valor da lista vira u
 
 Se a conta tiver um atributo de contato com a chave `kanbanwoot` (sugestão: tipo caixa de seleção), **só os contatos com `kanbanwoot` marcado** aparecem no board. Sem esse atributo, todos os contatos entram.
 
+### Busca e filtros
+
+- **Busca**: um só campo. Com `@`, busca no e-mail; só com dígitos (e `+ ( ) - .`), no telefone; senão, no nome. O filtro de contatos do Chatwoot não permite combinar campos com "ou", por isso a busca escolhe um.
+- **Etiqueta**: mostra só os contatos com a etiqueta escolhida (etiquetas do contato, não da conversa).
+- Agente e caixa de entrada são da conversa, não do contato, e por isso não aparecem como filtro.
+
+### Tempo na etapa
+
+Ao mover um card, o KanbanWoot grava junto a data de entrada na etapa no atributo `<chave_do_atributo>_desde` do contato (ex.: `kbw_funil_desde`). O card mostra há quantos dias está na etapa: em amarelo a partir da metade do limite e em vermelho, com borda, a partir do limite (`KANBANWOOT_STALE_DAYS`, padrão 7 dias). Contatos movidos antes desta versão ficam sem a contagem até a próxima movimentação. Ao mover para "Não definido", os dois atributos são apagados.
+
 ### Cards
 
-Mostram nome, foto, telefone, e-mail e os atributos do contato cuja chave começa com `kbw_`, com o nome amigável de cada um.
+Mostram nome, foto, telefone, e-mail, tempo na etapa, link para o contato no Chatwoot e os atributos do contato cuja chave começa com `kbw_`, com o nome amigável de cada um. O menu "Mover para…" leva o card para o topo da coluna escolhida.
 
 ---
 
@@ -194,6 +207,7 @@ No Traefik ou no Easypanel, use uma regra de caminho `/kanban` no **mesmo domín
 | `KANBANWOOT_AUTH` | sim | `session` |
 | `CHATWOOT_ACCOUNT_ID` | sim | ID numérico da conta |
 | `KANBANWOOT_BASE_PATH` | não | Subcaminho público, ex.: `/kanban` (veja acima) |
+| `KANBANWOOT_STALE_DAYS` | não | Dias na etapa até o card ser marcado como parado (padrão `7`) |
 | `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
 
 ### Modo `proxy`: token de serviço
@@ -216,11 +230,13 @@ docker run -d -p 3000:3000 \
 | `CHATWOOT_ACCOUNT_ID` | sim | ID numérico da conta |
 | `CHATWOOT_TOKEN` | sim | Token de acesso de um usuário do Chatwoot |
 | `KANBANWOOT_BASE_PATH` | não | Subcaminho público, se houver |
+| `CHATWOOT_PUBLIC_URL` | não | URL do Chatwoot vista pelo navegador, para o link "abrir no Chatwoot" (padrão: `CHATWOOT_URL`) |
+| `KANBANWOOT_STALE_DAYS` | não | Dias na etapa até o card ser marcado como parado (padrão `7`) |
 | `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
 
 Os nomes antigos (`REACT_APP_CHATWOOT_URL`, `REACT_APP_CHATWOOT_ACCOUNT_ID`, `REACT_APP_CHATWOOT_TOKEN`) continuam aceitos.
 
-O proxy libera apenas o que o KanbanWoot usa: filtrar contatos por coluna, listar definições de atributos, atualizar um contato e remover atributos de um contato. Qualquer outra rota ou método em `/chatwoot-api/` responde `403`.
+O proxy libera apenas o que o KanbanWoot usa: filtrar contatos por coluna, listar etiquetas, listar definições de atributos, atualizar um contato e remover atributos de um contato. Qualquer outra rota ou método em `/chatwoot-api/` responde `403`.
 
 > ⚠️ **Neste modo o KanbanWoot não tem login.** Quem acessar a URL dele pode ver e alterar contatos usando o token configurado. Publique-o só em uma rede ou domínio restrito, ou coloque autenticação na frente (ex.: oauth2-proxy ou a autenticação do Easypanel). Prefira o token de um usuário com permissões mínimas. Se puder publicar no domínio do Chatwoot, prefira o modo `session`.
 

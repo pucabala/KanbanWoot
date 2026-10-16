@@ -4,7 +4,9 @@ import { useLocation } from 'react-router-dom';
 import {
   getContactsByStage,
   getCustomAttributes,
-  updateContactCustomAttribute,
+  updateContactCustomAttributes,
+  getLabels,
+  stageSinceKey,
   removeContactCustomAttributes,
   UNASSIGNED_STAGE,
   KANBANWOOT_FLAG_KEY,
@@ -67,6 +69,10 @@ export function useKanbanData() {
   // Colunas com busca em andamento (evita pedir a mesma página duas vezes antes do re-render)
   const inFlightRef = useRef(new Set());
 
+  // Filtros do board: busca (nome/telefone/e-mail) e etiqueta
+  const [filters, setFilters] = useState({ search: '', label: '' });
+  const [labels, setLabels] = useState([]);
+
   // Agente logado no Chatwoot (só no modo sessão)
   const [agent, setAgent] = useState(null);
 
@@ -79,7 +85,14 @@ export function useKanbanData() {
         if (active) setAgent(currentAgent);
         return getCustomAttributes();
       })
-      .then(attrs => { if (active) setAttributeDefs(attrs); })
+      .then(attrs => {
+        if (!active) return;
+        setAttributeDefs(attrs);
+        // Etiquetas são opcionais: se falhar, o filtro só fica sem opções
+        getLabels()
+          .then(list => { if (active) setLabels(list); })
+          .catch(err => console.error('[DEBUG] Erro ao carregar etiquetas:', err));
+      })
       .catch(err => { if (active) { setError(err); setLoading(false); } });
     return () => { active = false; };
   }, []);
@@ -130,7 +143,7 @@ export function useKanbanData() {
     const page = col.page + 1;
     dispatch({ type: 'STAGE_LOADING', payload: { stage } });
     try {
-      const { contacts, count } = await getContactsByStage(attributeKey, stage, page, { onlyFlagged });
+      const { contacts, count } = await getContactsByStage(attributeKey, stage, page, { onlyFlagged, ...filters });
       if (generation !== generationRef.current) return;
       dispatch({ type: 'STAGE_LOADED', payload: { stage, page, contacts, count } });
     } catch (err) {
@@ -140,7 +153,7 @@ export function useKanbanData() {
     } finally {
       if (generation === generationRef.current) inFlightRef.current.delete(stage);
     }
-  }, [attributeKey, onlyFlagged]);
+  }, [attributeKey, onlyFlagged, filters]);
 
   // Ao trocar de atributo: zera o board e carrega a 1ª página de cada coluna em paralelo
   useEffect(() => {
@@ -165,29 +178,37 @@ export function useKanbanData() {
       return;
     }
     const contact = boardRef.current[source]?.contacts.find(c => c.id === contactId);
-    const previousValue = contact?.custom_attributes?.[attributeKey];
+    const sinceKey = stageSinceKey(attributeKey);
+    const previous = {
+      [attributeKey]: contact?.custom_attributes?.[attributeKey],
+      [sinceKey]: contact?.custom_attributes?.[sinceKey]
+    };
     const value = destination === UNASSIGNED_STAGE ? undefined : destination;
     if (typeof value !== 'undefined' && !attribute.attribute_values.includes(value)) {
       throw new Error(`Valor inválido para coluna: "${value}"`);
     }
+    // Junto com a etapa, grava quando o contato entrou nela (para o tempo na etapa)
+    const next = typeof value === 'undefined'
+      ? { [attributeKey]: undefined, [sinceKey]: undefined }
+      : { [attributeKey]: value, [sinceKey]: new Date().toISOString() };
     dispatch({
       type: 'MOVE_CARD',
-      payload: { source, destination, contactId, index: destinationIndex, attributeKey, value }
+      payload: { source, destination, contactId, index: destinationIndex, attributes: next }
     });
     try {
       if (typeof value === 'undefined') {
-        await removeContactCustomAttributes(contactId, [attributeKey]);
+        await removeContactCustomAttributes(contactId, [attributeKey, sinceKey]);
       } else {
-        await updateContactCustomAttribute(contactId, attributeKey, value);
+        await updateContactCustomAttributes(contactId, next);
       }
     } catch (err) {
       dispatch({
         type: 'MOVE_CARD',
-        payload: { source: destination, destination: source, contactId, index: sourceIndex, attributeKey, value: previousValue }
+        payload: { source: destination, destination: source, contactId, index: sourceIndex, attributes: previous }
       });
       throw err;
     }
   }, [attribute, attributeKey]);
 
-  return { agent, board, columns, attribute, listAttributes, displayNames, loading, error, loadMore, moveContact };
+  return { agent, board, columns, attribute, listAttributes, displayNames, loading, error, loadMore, moveContact, filters, setFilters, labels };
 }

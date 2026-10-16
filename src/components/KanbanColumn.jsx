@@ -9,10 +9,13 @@ import { UNASSIGNED_STAGE } from '../api';
  *  stage: string,
  *  column?: { contacts: Array<object>, count: number | null, hasMore: boolean, loading: boolean, error: Error | null },
  *  onLoadMore: () => void,
+ *  onMoveCard?: (contact: object, index: number, destination: string) => void,
+ *  stages?: string[],
+ *  attributeKey?: string,
  *  attrDisplayNames?: Record<string, string>
  * }} props
  */
-export default function KanbanColumn({ stage, column, onLoadMore, attrDisplayNames }) {
+export default function KanbanColumn({ stage, column, onLoadMore, onMoveCard, stages, attributeKey, attrDisplayNames }) {
   const contacts = column?.contacts || [];
   const scrollRef = useRef(null);
   const sentinelRef = useRef(null);
@@ -51,7 +54,16 @@ export default function KanbanColumn({ stage, column, onLoadMore, attrDisplayNam
             aria-labelledby={`col-title-${stage}`}
           >
             {contacts.map((contact, index) => (
-              <KanbanCard key={contact.id} contact={contact} index={index} attrDisplayNames={attrDisplayNames} />
+              <KanbanCard
+                key={contact.id}
+                contact={contact}
+                index={index}
+                stage={stage}
+                stages={stages}
+                attributeKey={attributeKey}
+                onMove={onMoveCard ? destination => onMoveCard(contact, index, destination) : undefined}
+                attrDisplayNames={attrDisplayNames}
+              />
             ))}
             {provided.placeholder}
             {column?.loading && <div className="text-sm text-gray-500 text-center py-2">Carregando...</div>}
