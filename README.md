@@ -42,7 +42,13 @@ npm install
 
 ### 🌐 Variáveis de Ambiente
 
-Crie um arquivo `.env` na raiz do projeto com as credenciais da API do Chatwoot:
+Copie o arquivo de exemplo e preencha com as credenciais da API do Chatwoot:
+
+```bash
+cp .env.example .env
+```
+
+O `.env` não é versionado (está no `.gitignore`). Variáveis esperadas:
 
 ```env
 REACT_APP_CHATWOOT_TOKEN=seu_token_aqui

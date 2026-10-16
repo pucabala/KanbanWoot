@@ -14,7 +14,7 @@ O erro `npm: The term 'npm' is not recognized` indica que o Node.js não está i
 
 O arquivo `.env` precisa das suas credenciais reais do Chatwoot.
 
-1. Abra o arquivo `.env` na raiz do projeto.
+1. Copie o exemplo: `cp .env.example .env` (o `.env` não é versionado).
 2. Substitua os valores de exemplo pelos seus dados reais:
 
 ```env
