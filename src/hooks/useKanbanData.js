@@ -7,7 +7,9 @@ import {
   updateContactCustomAttribute,
   removeContactCustomAttributes,
   UNASSIGNED_STAGE,
-  KANBANWOOT_FLAG_KEY
+  KANBANWOOT_FLAG_KEY,
+  AUTH_MODE,
+  getCurrentAgent
 } from '../api';
 import { kanbanReducer } from '../reducers/kanbanReducer';
 
@@ -65,10 +67,18 @@ export function useKanbanData() {
   // Colunas com busca em andamento (evita pedir a mesma página duas vezes antes do re-render)
   const inFlightRef = useRef(new Set());
 
-  // Busca as definições de atributos uma única vez
+  // Agente logado no Chatwoot (só no modo sessão)
+  const [agent, setAgent] = useState(null);
+
+  // Modo sessão: confere o agente logado; depois busca as definições de atributos uma única vez
   useEffect(() => {
     let active = true;
-    getCustomAttributes()
+    const checkAgent = AUTH_MODE === 'session' ? getCurrentAgent() : Promise.resolve(null);
+    checkAgent
+      .then(currentAgent => {
+        if (active) setAgent(currentAgent);
+        return getCustomAttributes();
+      })
       .then(attrs => { if (active) setAttributeDefs(attrs); })
       .catch(err => { if (active) { setError(err); setLoading(false); } });
     return () => { active = false; };
@@ -179,5 +189,5 @@ export function useKanbanData() {
     }
   }, [attribute, attributeKey]);
 
-  return { board, columns, attribute, listAttributes, displayNames, loading, error, loadMore, moveContact };
+  return { agent, board, columns, attribute, listAttributes, displayNames, loading, error, loadMore, moveContact };
 }

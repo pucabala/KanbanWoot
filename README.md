@@ -13,7 +13,8 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 - ⚡ Movimentação otimista: o card muda de coluna na hora e volta, com aviso, se a API recusar
 - ✅ Filtro opcional pelo atributo `kanbanwoot` para escolher quais contatos entram no board
 - 📝 Nomes amigáveis (display name) dos atributos e dos atributos `kbw_*` mostrados nos cards
-- 🔒 No Docker, o token do Chatwoot fica só no servidor (proxy no nginx)
+- 🔐 Login herdado do Chatwoot: publicado no mesmo domínio, usa a sessão do agente já logado (sem 2º login)
+- 🔒 Alternativa com token de serviço que fica só no servidor (proxy no nginx)
 - 🖇️ Pode ser incorporado ao Chatwoot pelo Painel de Aplicativos
 
 ---
@@ -96,7 +97,7 @@ npm start
 
 ## 🛡️ Configuração do Chatwoot para uso externo (CORS/Easypanel)
 
-> **Só necessário no desenvolvimento local** (`npm start`). Com o Docker, o navegador fala apenas com o próprio KanbanWoot e o nginx repassa as chamadas ao Chatwoot, então não há CORS.
+> **Só necessário no desenvolvimento local** (`npm start`). Com o Docker, nos dois modos o navegador só fala com o próprio domínio (o do Chatwoot no modo `session`, o do KanbanWoot no modo `proxy`), então não há CORS.
 
 Para que o KanbanWoot consiga acessar a API do Chatwoot hospedado em outro domínio, é necessário liberar o CORS no backend do Chatwoot.
 
@@ -145,9 +146,59 @@ Assim, o Chatwoot aceitará conexões externas, facilitando a integração com o
 
 ## 🐳 Deploy com Docker
 
-Este projeto está pronto para ser publicado via Docker.
+O `Dockerfile` incluso faz o build do React e serve os arquivos com nginx na porta 3000. Há dois modos, escolhidos por `KANBANWOOT_AUTH`:
 
-O `Dockerfile` incluso faz o build do React e serve os arquivos com nginx. O nginx também funciona como **proxy da API do Chatwoot**: o navegador chama `/chatwoot-api/...` e o nginx repassa para o Chatwoot adicionando o token. Assim o token **nunca chega ao navegador**.
+| | `session` (recomendado) | `proxy` (padrão) |
+|---|---|---|
+| Login | Usa a sessão do agente já logado no Chatwoot | Nenhum: quem acessa a URL usa o board |
+| Onde publicar | **No mesmo domínio do Chatwoot**, num subcaminho (ex.: `https://chat.empresa.com/kanban/`) | Qualquer domínio |
+| Permissões | As do próprio agente; o Chatwoot registra quem fez cada mudança | As do usuário dono do token de serviço |
+| Token no container | Não | Sim (`CHATWOOT_TOKEN`) |
+
+### Modo `session`: login herdado do Chatwoot
+
+O painel do Chatwoot guarda a sessão do agente no cookie `cw_d_session_info`, que o navegador só entrega a páginas do mesmo domínio. Publicado em um subcaminho do Chatwoot, o KanbanWoot lê essa sessão e chama a API do Chatwoot como o próprio agente, do mesmo jeito que o painel do Chatwoot faz. Não há segunda tela de login nem token guardado no KanbanWoot.
+
+- Agente **não logado** no Chatwoot: o KanbanWoot mostra um aviso com link para a tela de login do Chatwoot.
+- Agente logado **sem acesso à conta** `CHATWOOT_ACCOUNT_ID`: o board não carrega.
+- Logout no Chatwoot encerra o acesso ao KanbanWoot.
+
+```bash
+docker build -t kanbanwoot .
+docker run -d -p 3000:3000 \
+  -e KANBANWOOT_AUTH=session \
+  -e CHATWOOT_ACCOUNT_ID=1 \
+  -e KANBANWOOT_BASE_PATH=/kanban \
+  kanbanwoot
+```
+
+Depois, no proxy reverso que atende o domínio do Chatwoot, encaminhe **`/kanban/`** para o container do KanbanWoot e todo o resto para o Chatwoot. Exemplo com nginx:
+
+```nginx
+location /kanban/ {
+    proxy_pass http://kanbanwoot:3000;   # sem barra no final: o prefixo /kanban é mantido
+}
+location = /kanban {
+    proxy_pass http://kanbanwoot:3000;   # redireciona para /kanban/
+}
+```
+
+No Traefik ou no Easypanel, use uma regra de caminho `/kanban` no **mesmo domínio** do Chatwoot apontando para o serviço do KanbanWoot.
+
+- `KANBANWOOT_BASE_PATH` deve ser igual ao caminho público quando o proxy **mantém** o prefixo (como no exemplo). Se o seu proxy **remove** o prefixo, deixe a variável vazia e sempre use a URL com a barra final (`/kanban/`).
+- O KanbanWoot passa a rodar com os mesmos privilégios de navegador do painel do Chatwoot (mesmo domínio). Só publique assim uma versão do KanbanWoot em que você confia.
+- Subdomínios diferentes (ex.: `kanban.empresa.com` e `chat.empresa.com`) **não** funcionam: o cookie do Chatwoot vale só para o host dele.
+
+| Variável | Obrigatória | Descrição |
+|---|---|---|
+| `KANBANWOOT_AUTH` | sim | `session` |
+| `CHATWOOT_ACCOUNT_ID` | sim | ID numérico da conta |
+| `KANBANWOOT_BASE_PATH` | não | Subcaminho público, ex.: `/kanban` (veja acima) |
+| `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
+
+### Modo `proxy`: token de serviço
+
+Para publicar em outro domínio. O nginx funciona como **proxy da API do Chatwoot**: o navegador chama `/chatwoot-api/...` e o nginx repassa para o Chatwoot adicionando o token. Assim o token **nunca chega ao navegador**.
 
 ```bash
 docker build -t kanbanwoot .
@@ -160,18 +211,18 @@ docker run -d -p 3000:3000 \
 
 | Variável | Obrigatória | Descrição |
 |---|---|---|
+| `KANBANWOOT_AUTH` | não | `proxy` (padrão) |
 | `CHATWOOT_URL` | sim | URL do Chatwoot (sem `/api/...`) |
 | `CHATWOOT_ACCOUNT_ID` | sim | ID numérico da conta |
 | `CHATWOOT_TOKEN` | sim | Token de acesso de um usuário do Chatwoot |
+| `KANBANWOOT_BASE_PATH` | não | Subcaminho público, se houver |
 | `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
 
 Os nomes antigos (`REACT_APP_CHATWOOT_URL`, `REACT_APP_CHATWOOT_ACCOUNT_ID`, `REACT_APP_CHATWOOT_TOKEN`) continuam aceitos.
 
 O proxy libera apenas o que o KanbanWoot usa: filtrar contatos por coluna, listar definições de atributos, atualizar um contato e remover atributos de um contato. Qualquer outra rota ou método em `/chatwoot-api/` responde `403`.
 
-> ⚠️ **O KanbanWoot não tem login próprio.** Quem acessar a URL dele pode ver e alterar contatos usando o token configurado. Publique-o só em uma rede ou domínio restrito, ou coloque autenticação na frente (ex.: no proxy reverso do Easypanel). Prefira o token de um usuário com permissões mínimas.
-
-Acesse a aplicação na porta 3000 após o deploy.
+> ⚠️ **Neste modo o KanbanWoot não tem login.** Quem acessar a URL dele pode ver e alterar contatos usando o token configurado. Publique-o só em uma rede ou domínio restrito, ou coloque autenticação na frente (ex.: oauth2-proxy ou a autenticação do Easypanel). Prefira o token de um usuário com permissões mínimas. Se puder publicar no domínio do Chatwoot, prefira o modo `session`.
 
 ---
 
@@ -186,8 +237,8 @@ Você pode exibir o KanbanWoot diretamente no painel lateral do Chatwoot para qu
 2. Clique em **Adicionar um novo aplicativo**.
 3. Preencha os campos:
    - **Nome:** KanbanWoot
-   - **Endpoint:** `https://meu_kanbanwoot.com/?kbw=kbw_funil`
-     - Substitua pelo domínio real do seu KanbanWoot e pela chave do atributo de lista desejado (ex.: `kbw_funil`).
+   - **Endpoint:** `https://chat.empresa.com/kanban/?kbw=kbw_funil` (modo `session`) ou `https://meu_kanbanwoot.com/?kbw=kbw_funil` (modo `proxy`)
+     - Substitua pelo endereço real do seu KanbanWoot e pela chave do atributo de lista desejado (ex.: `kbw_funil`).
      - Use o `?kbw=` no endpoint: dentro do iframe, alguns navegadores (ex.: Safari) bloqueiam o cookie que guarda o último atributo escolhido.
 4. Salve. O KanbanWoot aparecerá como um painel lateral dentro do Chatwoot, fornecendo contexto visual e permitindo movimentação dos contatos sem sair do atendimento.
 
@@ -199,4 +250,3 @@ Você pode exibir o KanbanWoot diretamente no painel lateral do Chatwoot para qu
 
 - Filtragem por tags, agentes ou inbox
 - Integração com histórico de conversas
-- Login com autenticação de operadores Chatwoot

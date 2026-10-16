@@ -3,6 +3,9 @@ server {
     listen 3000;
     server_name localhost;
 
+    # Subcaminho opcional (KANBANWOOT_BASE_PATH), gerado pelo entrypoint.sh
+    include /etc/nginx/kbw-base-path.conf;
+
     location / {
         root   /usr/share/nginx/html;
         index  index.html index.htm;
