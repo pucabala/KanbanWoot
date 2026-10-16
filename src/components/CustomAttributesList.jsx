@@ -1,6 +1,6 @@
 // CustomAttributesList.jsx
 import React from 'react';
-import { STAGE_SINCE_SUFFIX } from '../api';
+import { STAGE_SINCE_SUFFIX, STAGE_REASON_SUFFIX } from '../api';
 
 /**
  * @param {{ attributes: Record<string, any>, displayNames: Record<string, string> }} props
@@ -9,7 +9,7 @@ export default function CustomAttributesList({ attributes, displayNames }) {
   return (
     <div className="mt-2 text-xs text-gray-500">
       {Object.entries(attributes)
-        .filter(([key, value]) => key.startsWith('kbw_') && !key.endsWith(STAGE_SINCE_SUFFIX) && value != null && value !== '')
+        .filter(([key, value]) => key.startsWith('kbw_') && !key.endsWith(STAGE_SINCE_SUFFIX) && !key.endsWith(STAGE_REASON_SUFFIX) && value != null && value !== '')
         .map(([key, value]) => (
           <div key={key} className="truncate" title={String(value)}>
             <span className="font-semibold">{displayNames[key] || key.replace('kbw_', '')}: </span>

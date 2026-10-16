@@ -13,6 +13,8 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 - 🔎 Busca por nome, telefone ou e-mail e filtro por etiqueta
 - ⏱️ Tempo na etapa em cada card, com destaque para os parados há mais de N dias
 - ↗️ Link para abrir o contato no Chatwoot
+- 🏁 Etapas de ganho e perda com motivo (obrigatório na perda), exibido no card
+- 🎯 Dentro do Painel de Aplicativos, destaca o card do contato da conversa aberta
 - ⚡ Movimentação otimista: o card muda de coluna na hora e volta, com aviso, se a API recusar
 - ✅ Filtro opcional pelo atributo `kanbanwoot` para escolher quais contatos entram no board
 - 📝 Nomes amigáveis (display name) dos atributos e dos atributos `kbw_*` mostrados nos cards
@@ -53,9 +55,26 @@ Se a conta tiver um atributo de contato com a chave `kanbanwoot` (sugestão: tip
 
 Ao mover um card, o KanbanWoot grava junto a data de entrada na etapa no atributo `<chave_do_atributo>_desde` do contato (ex.: `kbw_funil_desde`). O card mostra há quantos dias está na etapa: em amarelo a partir da metade do limite e em vermelho, com borda, a partir do limite (`KANBANWOOT_STALE_DAYS`, padrão 7 dias). Contatos movidos antes desta versão ficam sem a contagem até a próxima movimentação. Ao mover para "Não definido", os dois atributos são apagados.
 
+### Ganho e perda
+
+Etapas com estes nomes (sem diferenciar maiúsculas) são tratadas como finais:
+
+- **Ganho**: `Ganho`, `Ganhou`, `Vendido`, `Fechado`, `Fechado ganho`, `Won`
+- **Perda**: `Perdido`, `Perdeu`, `Fechado perdido`, `Cancelado`, `Lost`
+
+Para usar outros nomes, defina `KANBANWOOT_WON_STAGES` e `KANBANWOOT_LOST_STAGES` (listas separadas por vírgula).
+
+Ao mover um card para uma etapa final, abre um diálogo: na perda o motivo é **obrigatório** (com sugestões de `KANBANWOOT_LOST_REASONS`, mais "Outro…"); no ganho há uma observação opcional. Cancelar não move o card. O motivo fica no atributo `<chave_do_atributo>_motivo` do contato (ex.: `kbw_funil_motivo`) e aparece no card. Ao sair de uma etapa final, o motivo é limpo. Cards em etapas finais não são marcados como parados.
+
+### Contato da conversa aberta
+
+Dentro do Painel de Aplicativos, o KanbanWoot pergunta ao Chatwoot qual contato está na conversa aberta (a cada 2 segundos, porque o Chatwoot não avisa quando o agente troca de conversa). Uma faixa no topo mostra o nome e a etapa do contato, e o card dele ganha destaque e é rolado até ficar visível. Se o card não estiver carregado ou estiver fora dos filtros, a faixa avisa.
+
+As mensagens só são aceitas da página que contém o KanbanWoot e da origem do Chatwoot (a do próprio app no modo `session`; a de `CHATWOOT_PUBLIC_URL` no modo `proxy`). Esse contexto não é assinado pelo Chatwoot e serve só para o destaque, nunca para autenticação.
+
 ### Cards
 
-Mostram nome, foto, telefone, e-mail, tempo na etapa, link para o contato no Chatwoot e os atributos do contato cuja chave começa com `kbw_`, com o nome amigável de cada um. O menu "Mover para…" leva o card para o topo da coluna escolhida.
+Mostram nome, foto, telefone, e-mail, tempo na etapa, ganho/perda com motivo, link para o contato no Chatwoot e os atributos do contato cuja chave começa com `kbw_`, com o nome amigável de cada um. O menu "Mover para…" leva o card para o topo da coluna escolhida.
 
 ---
 
@@ -208,6 +227,9 @@ No Traefik ou no Easypanel, use uma regra de caminho `/kanban` no **mesmo domín
 | `CHATWOOT_ACCOUNT_ID` | sim | ID numérico da conta |
 | `KANBANWOOT_BASE_PATH` | não | Subcaminho público, ex.: `/kanban` (veja acima) |
 | `KANBANWOOT_STALE_DAYS` | não | Dias na etapa até o card ser marcado como parado (padrão `7`) |
+| `KANBANWOOT_WON_STAGES` | não | Nomes das etapas de ganho, separados por vírgula (veja "Ganho e perda") |
+| `KANBANWOOT_LOST_STAGES` | não | Nomes das etapas de perda, separados por vírgula |
+| `KANBANWOOT_LOST_REASONS` | não | Motivos de perda sugeridos, separados por vírgula |
 | `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
 
 ### Modo `proxy`: token de serviço
@@ -232,6 +254,9 @@ docker run -d -p 3000:3000 \
 | `KANBANWOOT_BASE_PATH` | não | Subcaminho público, se houver |
 | `CHATWOOT_PUBLIC_URL` | não | URL do Chatwoot vista pelo navegador, para o link "abrir no Chatwoot" (padrão: `CHATWOOT_URL`) |
 | `KANBANWOOT_STALE_DAYS` | não | Dias na etapa até o card ser marcado como parado (padrão `7`) |
+| `KANBANWOOT_WON_STAGES` | não | Nomes das etapas de ganho, separados por vírgula (veja "Ganho e perda") |
+| `KANBANWOOT_LOST_STAGES` | não | Nomes das etapas de perda, separados por vírgula |
+| `KANBANWOOT_LOST_REASONS` | não | Motivos de perda sugeridos, separados por vírgula |
 | `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
 
 Os nomes antigos (`REACT_APP_CHATWOOT_URL`, `REACT_APP_CHATWOOT_ACCOUNT_ID`, `REACT_APP_CHATWOOT_TOKEN`) continuam aceitos.

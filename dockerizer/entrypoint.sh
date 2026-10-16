@@ -13,6 +13,15 @@ CHATWOOT_ACCOUNT_ID="${CHATWOOT_ACCOUNT_ID:-$REACT_APP_CHATWOOT_ACCOUNT_ID}"
 DEBUG="${REACT_APP_DEBUG:-false}"
 # Dias na mesma etapa até o card ser marcado como parado
 STALE_DAYS="${KANBANWOOT_STALE_DAYS:-7}"
+# Etapas finais e motivos de perda (listas separadas por vírgula; vazio = padrão do app)
+WON_STAGES="${KANBANWOOT_WON_STAGES:-}"
+LOST_STAGES="${KANBANWOOT_LOST_STAGES:-}"
+LOST_REASONS="${KANBANWOOT_LOST_REASONS:-}"
+
+# Escapa texto livre para uma string JavaScript entre aspas duplas
+js_escape() {
+  printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e 's/</\\u003c/g' | tr -d '\n\r'
+}
 # Subcaminho em que o app é publicado sem remover o prefixo (ex.: /kanban); vazio = raiz
 BASE_PATH="${KANBANWOOT_BASE_PATH%/}"
 
@@ -79,6 +88,9 @@ $PROXY_LINE
   REACT_APP_CHATWOOT_ACCOUNT_ID: "${CHATWOOT_ACCOUNT_ID}",
   REACT_APP_CHATWOOT_PUBLIC_URL: "${CHATWOOT_PUBLIC_URL}",
   REACT_APP_STALE_DAYS: "${STALE_DAYS}",
+  REACT_APP_WON_STAGES: "$(js_escape "$WON_STAGES")",
+  REACT_APP_LOST_STAGES: "$(js_escape "$LOST_STAGES")",
+  REACT_APP_LOST_REASONS: "$(js_escape "$LOST_REASONS")",
   REACT_APP_DEBUG: "${DEBUG}"
 };
 JS

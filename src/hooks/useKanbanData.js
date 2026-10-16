@@ -7,6 +7,8 @@ import {
   updateContactCustomAttributes,
   getLabels,
   stageSinceKey,
+  stageReasonKey,
+  stageOutcome,
   removeContactCustomAttributes,
   UNASSIGNED_STAGE,
   KANBANWOOT_FLAG_KEY,
@@ -172,16 +174,20 @@ export function useKanbanData() {
   }, [attributeDefs, attributeKey, columns, loadMore]);
 
   // Move um card: atualização otimista, desfeita se a API falhar
-  const moveContact = useCallback(async ({ contactId, source, destination, sourceIndex, destinationIndex }) => {
+  // reason: motivo do ganho/perda, quando o destino é uma etapa final
+  const moveContact = useCallback(async ({ contactId, source, destination, sourceIndex, destinationIndex, reason }) => {
     if (source === destination) {
       dispatch({ type: 'MOVE_CARD', payload: { source, destination, contactId, index: destinationIndex } });
       return;
     }
     const contact = boardRef.current[source]?.contacts.find(c => c.id === contactId);
     const sinceKey = stageSinceKey(attributeKey);
+    const reasonKey = stageReasonKey(attributeKey);
+    const current = contact?.custom_attributes || {};
     const previous = {
-      [attributeKey]: contact?.custom_attributes?.[attributeKey],
-      [sinceKey]: contact?.custom_attributes?.[sinceKey]
+      [attributeKey]: current[attributeKey],
+      [sinceKey]: current[sinceKey],
+      [reasonKey]: current[reasonKey]
     };
     const value = destination === UNASSIGNED_STAGE ? undefined : destination;
     if (typeof value !== 'undefined' && !attribute.attribute_values.includes(value)) {
@@ -189,15 +195,22 @@ export function useKanbanData() {
     }
     // Junto com a etapa, grava quando o contato entrou nela (para o tempo na etapa)
     const next = typeof value === 'undefined'
-      ? { [attributeKey]: undefined, [sinceKey]: undefined }
+      ? { [attributeKey]: undefined, [sinceKey]: undefined, [reasonKey]: undefined }
       : { [attributeKey]: value, [sinceKey]: new Date().toISOString() };
+    if (typeof value !== 'undefined') {
+      const trimmed = (reason || '').trim();
+      if (stageOutcome(value) === 'lost' && !trimmed) throw new Error('Informe o motivo da perda.');
+      // Fora de etapa final, um motivo antigo é limpo (null: o PUT do Chatwoot não remove chaves)
+      if (stageOutcome(value)) next[reasonKey] = trimmed || null;
+      else if (current[reasonKey] != null) next[reasonKey] = null;
+    }
     dispatch({
       type: 'MOVE_CARD',
       payload: { source, destination, contactId, index: destinationIndex, attributes: next }
     });
     try {
       if (typeof value === 'undefined') {
-        await removeContactCustomAttributes(contactId, [attributeKey, sinceKey]);
+        await removeContactCustomAttributes(contactId, [attributeKey, sinceKey, reasonKey]);
       } else {
         await updateContactCustomAttributes(contactId, next);
       }

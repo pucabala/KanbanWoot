@@ -7,7 +7,9 @@ import ErrorMessage from './ErrorMessage';
 import { useKanbanData } from '../hooks/useKanbanData';
 import KanbanColumn from './KanbanColumn';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { CHATWOOT_LOGIN_URL } from '../api';
+import { CHATWOOT_LOGIN_URL, UNASSIGNED_STAGE, stageOutcome } from '../api';
+import { useChatwootContext } from '../hooks/useChatwootContext';
+import OutcomeDialog from './OutcomeDialog';
 
 function KanbanBoard() {
   // Colunas carregadas página a página, filtradas no servidor
@@ -27,36 +29,51 @@ function KanbanBoard() {
   }, [searchText, setFilters]);
   const hasFilters = Boolean(filters.search || filters.label || searchText);
 
-  // Move pelo menu "Mover para…": vai para o topo da coluna de destino
-  const moveFromMenu = async (contact, sourceIndex, source, destination) => {
+  // Move de fato (otimista, desfeito se a API falhar)
+  const performMove = async move => {
     try {
-      await moveContact({ contactId: contact.id, source, destination, sourceIndex, destinationIndex: 0 });
+      await moveContact(move);
     } catch (err) {
       setNotification({ type: 'error', message: `Erro ao atualizar estágio: ${err?.message || err}` });
       console.error('[KanbanBoard] Falha ao atualizar estágio:', err);
     }
   };
 
+  // Etapas finais (ganho/perda) pedem o motivo antes de mover
+  const [pendingMove, setPendingMove] = useState(null);
+  const requestMove = move => {
+    const outcome = move.source !== move.destination ? stageOutcome(move.destination) : null;
+    if (outcome) setPendingMove({ ...move, outcome });
+    else performMove(move);
+  };
+
+  // Menu "Mover para…": vai para o topo da coluna de destino
+  const moveFromMenu = (contact, sourceIndex, source, destination) =>
+    requestMove({ contactId: contact.id, contactName: contact.name, source, destination, sourceIndex, destinationIndex: 0 });
+
   /**
    * Handler do drag-and-drop: move o card e atualiza o valor do atributo no backend
    */
-  const onDragEnd = async ({ source, destination, draggableId }) => {
+  const onDragEnd = ({ source, destination, draggableId }) => {
     if (!destination) return;
     const contact = board[source.droppableId]?.contacts[source.index];
     if (!contact || String(contact.id) !== draggableId) return;
-    try {
-      await moveContact({
-        contactId: contact.id,
-        source: source.droppableId,
-        destination: destination.droppableId,
-        sourceIndex: source.index,
-        destinationIndex: destination.index
-      });
-    } catch (err) {
-      setNotification({ type: 'error', message: `Erro ao atualizar estágio: ${err?.message || err}` });
-      console.error('[KanbanBoard] Falha ao atualizar estágio:', err);
-    }
+    requestMove({
+      contactId: contact.id,
+      contactName: contact.name,
+      source: source.droppableId,
+      destination: destination.droppableId,
+      sourceIndex: source.index,
+      destinationIndex: destination.index
+    });
   };
+
+  // Contato da conversa aberta no Chatwoot (Painel de Aplicativos)
+  const { contact: openContact } = useChatwootContext();
+  const openContactStage = openContact && attribute
+    ? (openContact.custom_attributes?.[attribute.attribute_key] ?? UNASSIGNED_STAGE)
+    : null;
+  const openContactLoaded = Boolean(openContact && Object.values(board).some(col => col.contacts.some(c => c.id === openContact.id)));
 
   // Muda a URL ao trocar o atributo
   const handleAttributeChange = (e) => {
@@ -107,6 +124,15 @@ function KanbanBoard() {
         {agent && <span className="text-sm text-gray-500">Conectado como {agent.name || agent.email}</span>}
       </div>
 
+      {/* Contato da conversa aberta no Chatwoot */}
+      {openContact && (
+        <div className="mb-4 bg-blue-50 border border-blue-200 text-blue-900 px-3 py-2 rounded text-sm" role="status">
+          Conversa aberta: <strong>{openContact.name}</strong> — etapa{' '}
+          <strong>{openContactStage === UNASSIGNED_STAGE ? UNASSIGNED_STAGE : (displayNames[openContactStage] || openContactStage)}</strong>
+          {!openContactLoaded && <span className="text-blue-700"> (card não carregado ou fora dos filtros)</span>}
+        </div>
+      )}
+
       {/* Busca e filtros */}
       <div className="mb-4 flex flex-wrap items-center gap-2" role="search">
         <input
@@ -151,11 +177,26 @@ function KanbanBoard() {
               onMoveCard={(contact, index, destination) => moveFromMenu(contact, index, col, destination)}
               stages={columns}
               attributeKey={attribute.attribute_key}
+              highlightId={openContact?.id}
               attrDisplayNames={displayNames}
             />
           ))}
         </div>
       </DragDropContext>
+
+      {pendingMove && (
+        <OutcomeDialog
+          outcome={pendingMove.outcome}
+          contactName={pendingMove.contactName}
+          stageLabel={displayNames[pendingMove.destination] || pendingMove.destination}
+          onCancel={() => setPendingMove(null)}
+          onConfirm={reason => {
+            const { outcome, contactName, ...move } = pendingMove;
+            setPendingMove(null);
+            performMove({ ...move, reason });
+          }}
+        />
+      )}
     </div>
   );
 }
