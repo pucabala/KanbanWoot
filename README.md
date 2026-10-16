@@ -6,22 +6,42 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 
 ## 🚀 Funcionalidades
 
-- 📥 Cada coluna busca só os seus contatos no Chatwoot (filtro no servidor), carregando mais ao rolar
-- 🔄 Estágios/colunas definidos dinamicamente pelos valores cadastrados em qualquer campo customizado do tipo lista
-- 🧲 Interface com drag and drop usando `@hello-pangea/dnd`
-- ⚡ Atualização em tempo real com API REST do Chatwoot
-- 🎨 UI moderna com Tailwind CSS
-- 🏷️ Suporte a múltiplos atributos customizados do tipo lista (dropdown para seleção do atributo)
-- 🗂️ Coluna especial "Não definido" para contatos sem valor definido no atributo
-- ✅ Filtro opcional: se existir um atributo de contato `kanbanwoot` (tipo caixa de seleção), só os contatos marcados com ele aparecem no board
-- 🍪 Lembra o último atributo escolhido (cookie `kbw`) quando a URL não traz `?kbw=`
-- 📝 Exibição dos nomes amigáveis dos atributos e valores (display_name)
-- 🖱️ Atualização do estágio do contato ao arrastar (remove a chave do atributo ao mover para "Não definido")
-- 🔄 Movimentação otimista: o card muda de coluna na hora e volta se a API recusar
-- 🧩 Código modular e otimizado (hooks, memoização, sem requisições duplicadas)
-- 🏷️ Exibição de todos os atributos customizados do contato (com nomes amigáveis)
-- 🛠️ Responsividade e acessibilidade aprimoradas
-- 🐞 Notificações de erro/sucesso ao mover cards
+- 🗂️ Colunas definidas pelos valores de qualquer atributo de contato do tipo lista, mais a coluna "Não definido" para quem não tem valor
+- 🏷️ Dropdown para trocar de atributo; o último escolhido fica salvo em cookie
+- 📥 Cada coluna busca só os seus contatos no Chatwoot (filtro no servidor), 15 por vez, carregando mais ao rolar; o total aparece no topo da coluna
+- 🧲 Arrastar e soltar para mudar o contato de etapa (`@hello-pangea/dnd`)
+- ⚡ Movimentação otimista: o card muda de coluna na hora e volta, com aviso, se a API recusar
+- ✅ Filtro opcional pelo atributo `kanbanwoot` para escolher quais contatos entram no board
+- 📝 Nomes amigáveis (display name) dos atributos e dos atributos `kbw_*` mostrados nos cards
+- 🔒 No Docker, o token do Chatwoot fica só no servidor (proxy no nginx)
+- 🖇️ Pode ser incorporado ao Chatwoot pelo Painel de Aplicativos
+
+---
+
+## ⚙️ Como funciona
+
+### Atributo do board
+
+O board usa um atributo de contato do tipo **lista**; cada valor da lista vira uma coluna. O atributo é escolhido nesta ordem:
+
+1. Parâmetro `?kbw=<chave_do_atributo>` na URL
+2. Cookie `kbw` com o último atributo escolhido no dropdown (ou vindo da URL)
+3. Primeiro atributo do tipo lista cuja chave começa com `kbw_`
+4. Primeiro atributo do tipo lista
+
+### Colunas
+
+- Cada coluna é buscada separadamente com `POST /contacts/filter` do Chatwoot: `equal_to <valor>` nas etapas e `is_not_present` em "Não definido".
+- Mover um card para uma etapa grava o valor no contato; mover para "Não definido" apaga o atributo do contato (`destroy_custom_attributes`).
+- Contatos com um valor que **não está na lista** do atributo (ex.: um valor removido da definição) ou com valor vazio não aparecem em nenhuma coluna.
+
+### Filtro `kanbanwoot` (opcional)
+
+Se a conta tiver um atributo de contato com a chave `kanbanwoot` (sugestão: tipo caixa de seleção), **só os contatos com `kanbanwoot` marcado** aparecem no board. Sem esse atributo, todos os contatos entram.
+
+### Cards
+
+Mostram nome, foto, telefone, e-mail e os atributos do contato cuja chave começa com `kbw_`, com o nome amigável de cada um.
 
 ---
 
@@ -31,14 +51,15 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 - Tailwind CSS
 - Chatwoot API
 - @hello-pangea/dnd
+- nginx (servidor e proxy no Docker)
 
 ---
 
 ## 📦 Instalação
 
 ```bash
-git clone https://github.com/seu-usuario/kanbanwoot.git
-cd kanbanwoot
+git clone https://github.com/pucabala/KanbanWoot.git
+cd KanbanWoot
 npm install
 ```
 
@@ -58,6 +79,10 @@ REACT_APP_CHATWOOT_ACCOUNT_ID=1
 REACT_APP_CHATWOOT_URL=https://app.chatwoot.com
 REACT_APP_DEBUG=false
 ```
+
+> **Onde encontrar o token?** No Chatwoot, em Configurações de Perfil → Token de Acesso.
+>
+> `REACT_APP_DEBUG=true` liga os logs `[DEBUG]` no console do navegador.
 
 > O `.env` é só para desenvolvimento local: nesse modo o token vai para o navegador. No Docker, use as variáveis do container descritas em [Deploy com Docker](#-deploy-com-docker); lá o token fica só no servidor.
 
@@ -138,7 +163,7 @@ docker run -d -p 3000:3000 \
 | `CHATWOOT_URL` | sim | URL do Chatwoot (sem `/api/...`) |
 | `CHATWOOT_ACCOUNT_ID` | sim | ID numérico da conta |
 | `CHATWOOT_TOKEN` | sim | Token de acesso de um usuário do Chatwoot |
-| `REACT_APP_DEBUG` | não | `true` para logs de debug no console |
+| `REACT_APP_DEBUG` | não | `true` para logs de debug no console do navegador |
 
 Os nomes antigos (`REACT_APP_CHATWOOT_URL`, `REACT_APP_CHATWOOT_ACCOUNT_ID`, `REACT_APP_CHATWOOT_TOKEN`) continuam aceitos.
 
@@ -161,8 +186,9 @@ Você pode exibir o KanbanWoot diretamente no painel lateral do Chatwoot para qu
 2. Clique em **Adicionar um novo aplicativo**.
 3. Preencha os campos:
    - **Nome:** KanbanWoot
-   - **Endpoint:** `https://meu_kanbanwoot.com/?kbw=funil_status`
-     - Substitua pelo domínio real do seu KanbanWoot e pelo atributo desejado (ex: `funil_status`).
+   - **Endpoint:** `https://meu_kanbanwoot.com/?kbw=kbw_funil`
+     - Substitua pelo domínio real do seu KanbanWoot e pela chave do atributo de lista desejado (ex.: `kbw_funil`).
+     - Use o `?kbw=` no endpoint: dentro do iframe, alguns navegadores (ex.: Safari) bloqueiam o cookie que guarda o último atributo escolhido.
 4. Salve. O KanbanWoot aparecerá como um painel lateral dentro do Chatwoot, fornecendo contexto visual e permitindo movimentação dos contatos sem sair do atendimento.
 
 > O Painel de Aplicativos permite incorporar aplicações externas para fornecer informações adicionais ao agente, como histórico, pedidos ou status personalizado do cliente.
