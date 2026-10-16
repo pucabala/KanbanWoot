@@ -123,95 +123,97 @@ Mostram nome, foto, telefone, e-mail, valor, tempo na etapa, ganho/perda com mot
 
 ## 📦 Instalação
 
-```bash
-git clone https://github.com/pucabala/KanbanWoot.git
-cd KanbanWoot
-npm install
-```
+Resumo do caminho recomendado:
 
-### 🌐 Variáveis de Ambiente
+1. [Prepare o Chatwoot](#1-prepare-o-chatwoot): crie o atributo do funil e anote o ID da conta.
+2. [Escolha o modo de acesso](#2-escolha-o-modo-de-acesso): `session` (login do Chatwoot) ou `proxy` (token de serviço).
+3. Publique: [no Easypanel](#3-publicar-no-easypanel) ou [com Docker em outro servidor](#-deploy-com-docker).
+4. [Coloque o KanbanWoot dentro do Chatwoot](#-como-incorporar-o-kanbanwoot-no-chatwoot-painel-de-aplicativos) (Painel de Aplicativos).
 
-Copie o arquivo de exemplo e preencha com as credenciais da API do Chatwoot:
+Para mexer no código, veja [Desenvolvimento local](#-desenvolvimento-local).
 
-```bash
-cp .env.example .env
-```
+### 1. Prepare o Chatwoot
 
-O `.env` não é versionado (está no `.gitignore`). Variáveis esperadas:
+1. **Atributo do funil.** No Chatwoot, vá em **Configurações → Atributos personalizados → Adicionar atributo**:
+   - **Aplicar a**: Contato
+   - **Tipo**: Lista
+   - **Chave**: por exemplo `kbw_funil` (chaves que começam com `kbw_` são escolhidas automaticamente)
+   - **Valores da lista**: as etapas, na ordem das colunas (ex.: `Novo`, `Proposta`, `Ganho`, `Perdido`)
+2. **Atributos opcionais**, conforme o que você for usar:
+   - `kbw_valor` (Número): valor do negócio, veja [Valor do negócio](#valor-do-negócio)
+   - `kanbanwoot` (Caixa de seleção): limita o board aos contatos marcados, veja [Filtro `kanbanwoot`](#filtro-kanbanwoot-opcional)
+   - outros atributos com chave `kbw_...` aparecem nos cards
+3. **ID da conta.** É o número na URL do painel: `https://chat.empresa.com/app/accounts/`**`1`**`/dashboard`.
+4. **Token** (só no modo `proxy`). Entre com o usuário que o KanbanWoot vai usar e copie o token em **Configurações de Perfil → Token de Acesso**. Prefira um usuário com o mínimo de permissões necessárias.
+
+### 2. Escolha o modo de acesso
+
+| | `session` (recomendado) | `proxy` |
+|---|---|---|
+| Login | O do próprio Chatwoot, sem segunda tela | Nenhum: quem acessa a URL usa o board |
+| Endereço | **No domínio do Chatwoot**, num subcaminho: `https://chat.empresa.com/kanban/` | Qualquer domínio: `https://kanban.empresa.com/` |
+| Ações feitas como | Cada agente, com as permissões dele | O usuário dono do token |
+| Precisa de token | Não | Sim |
+
+Detalhes de cada modo em [Deploy com Docker](#-deploy-com-docker).
+
+### 3. Publicar no Easypanel
+
+Os passos valem para o Chatwoot instalado no mesmo Easypanel (ex.: pelo template do Chatwoot), com o domínio `chat.empresa.com`. Os nomes dos menus podem variar um pouco entre versões do Easypanel.
+
+**Criar o serviço**
+
+1. No projeto onde está o Chatwoot, clique em **+ Service → App** e dê um nome, por exemplo `kanbanwoot`.
+2. Em **Source**, escolha **GitHub** (ou **Git**) e informe o repositório (`pucabala/KanbanWoot` ou o seu fork), a branch `main` e o **Build Path** `/`.
+3. Em **Build**, escolha **Dockerfile** (arquivo `Dockerfile`, na raiz). Salve.
+
+**Variáveis de ambiente** (aba **Environment**, como variáveis de execução)
+
+Modo `session`:
 
 ```env
-REACT_APP_CHATWOOT_TOKEN=seu_token_aqui
-REACT_APP_CHATWOOT_ACCOUNT_ID=1
-REACT_APP_CHATWOOT_URL=https://app.chatwoot.com
-REACT_APP_DEBUG=false
+KANBANWOOT_AUTH=session
+CHATWOOT_ACCOUNT_ID=1
+KANBANWOOT_BASE_PATH=/kanban
 ```
 
-> **Onde encontrar o token?** No Chatwoot, em Configurações de Perfil → Token de Acesso.
->
-> `REACT_APP_DEBUG=true` liga os logs `[DEBUG]` no console do navegador.
+Modo `proxy`:
 
-> O `.env` é só para desenvolvimento local: nesse modo o token vai para o navegador. No Docker, use as variáveis do container descritas em [Deploy com Docker](#-deploy-com-docker); lá o token fica só no servidor.
-
-### ▶️ Rodar localmente
-
-```bash
-npm start
+```env
+KANBANWOOT_AUTH=proxy
+CHATWOOT_URL=https://chat.empresa.com
+CHATWOOT_ACCOUNT_ID=1
+CHATWOOT_TOKEN=seu_token_aqui
 ```
 
----
+Acrescente as opcionais que quiser (etapas de ganho/perda, campos obrigatórios, valor, intervalo de atualização…). A lista completa está nas tabelas de [Deploy com Docker](#-deploy-com-docker).
 
-## 🛡️ Configuração do Chatwoot para uso externo (CORS/Easypanel)
+**Domínio** (aba **Domains**)
 
-> **Só necessário no desenvolvimento local** (`npm start`). Com o Docker, nos dois modos o navegador só fala com o próprio domínio (o do Chatwoot no modo `session`, o do KanbanWoot no modo `proxy`), então não há CORS.
+- Modo `session`: adicione um domínio com o **mesmo host do Chatwoot** (`chat.empresa.com`), **caminho** `/kanban` e **porta** `3000`, com HTTPS. O Chatwoot continua respondendo no resto do domínio; o caminho mais específico (`/kanban`) vai para o KanbanWoot.
+- Modo `proxy`: adicione um domínio próprio (ex.: `kanban.empresa.com`), caminho `/` e porta `3000`, com HTTPS.
 
-Para que o KanbanWoot consiga acessar a API do Chatwoot hospedado em outro domínio, é necessário liberar o CORS no backend do Chatwoot.
+> Com `KANBANWOOT_BASE_PATH=/kanban`, o KanbanWoot funciona tanto se o Easypanel repassar o caminho com o prefixo `/kanban` quanto sem ele. Acesse sempre com a barra final: `https://chat.empresa.com/kanban/`.
 
-**Passo a passo:**
+**Publicar**
 
-1. **Monte o arquivo de configuração do CORS no container do Chatwoot:**
-   - Crie/edite o arquivo `/app/config/initializers/cors.rb` no servidor Chatwoot com o seguinte conteúdo:
+1. Clique em **Deploy** e acompanhe o log do build (a primeira vez leva alguns minutos).
+2. Nos logs do serviço deve aparecer `Modo sessão: ...` ou `Modo proxy: ...`. Se aparecer `Erro: variáveis obrigatórias não definidas`, revise a aba Environment.
+3. Abra `https://chat.empresa.com/kanban/` (ou o domínio do modo `proxy`). No modo `session`, entre no Chatwoot antes, no mesmo navegador.
 
-```ruby
-Rails.application.config.middleware.insert_before 0, Rack::Cors do
-  allow do
-    origins 'https://meu_kanbanwoot.com'
+**Atualizar**
 
-    resource '*',
-      headers: :any,
-      methods: [:get, :post, :put, :patch, :delete, :options, :head],
-      credentials: true
-  end
-end
-```
+Para pegar uma versão nova do KanbanWoot, clique em **Deploy** de novo no serviço (ou ative o deploy automático do Easypanel para a branch). Mudanças só nas variáveis de ambiente pedem só um **restart**/redeploy, sem rebuild.
 
-> **Dica:** Se estiver usando Docker, utilize a opção de montagem para garantir que o arquivo persista entre reinícios do serviço:
->
-> - Caminho de montagem: `/app/config/initializers/cors.rb`
-> - Conteúdo igual ao acima.
->
-> **Dica:** No Easypanel, use a opção de "Montagem de Arquivo" para garantir que o arquivo persista mesmo após reiniciar o serviço.
+**Segurança no modo `proxy`**
 
-2. **Reinicie o serviço do Chatwoot** para aplicar a configuração.
-
-3. **Atenção:**
-   - Altere o domínio em `origins` para o domínio real onde o KanbanWoot está hospedado.
-   - Não utilize `*` em produção por questões de segurança.
-
-4. **(Opcional) Ajuste o servidor Puma para aceitar conexões externas**
-
-Se necessário, edite a configuração do Puma (`config/puma.rb`) para escutar em todas as interfaces:
-
-```ruby
-port ENV.fetch("PORT") { 3000 }, '0.0.0.0'
-```
-
-Assim, o Chatwoot aceitará conexões externas, facilitando a integração com o Kanbanwoot.
+O KanbanWoot não tem login próprio nesse modo. Coloque autenticação na frente (ex.: a autenticação básica do domínio no Easypanel, se a sua versão oferecer, ou um oauth2-proxy) ou prefira o modo `session`.
 
 ---
 
 ## 🐳 Deploy com Docker
 
-O `Dockerfile` incluso faz o build do React e serve os arquivos com nginx na porta 3000. Há dois modos, escolhidos por `KANBANWOOT_AUTH`:
+Para qualquer servidor com Docker (no Easypanel, siga o [passo a passo acima](#3-publicar-no-easypanel); as variáveis são as mesmas). O `Dockerfile` incluso faz o build do React e serve os arquivos com nginx na porta 3000. Há dois modos, escolhidos por `KANBANWOOT_AUTH`:
 
 | | `session` (recomendado) | `proxy` (padrão) |
 |---|---|---|
@@ -308,6 +310,53 @@ O proxy libera apenas o que o KanbanWoot usa: filtrar contatos por coluna, lista
 
 ---
 
+## 💻 Desenvolvimento local
+
+Requer Node.js 18 ou mais novo ([nodejs.org](https://nodejs.org/)).
+
+```bash
+git clone https://github.com/pucabala/KanbanWoot.git
+cd KanbanWoot
+npm install
+cp .env.example .env    # depois preencha com os dados do seu Chatwoot
+npm start               # abre em http://localhost:3000
+```
+
+O `.env` não é versionado (está no `.gitignore`). Variáveis principais:
+
+```env
+REACT_APP_CHATWOOT_TOKEN=seu_token_aqui
+REACT_APP_CHATWOOT_ACCOUNT_ID=1
+REACT_APP_CHATWOOT_URL=https://app.chatwoot.com
+REACT_APP_DEBUG=false
+```
+
+As demais opções (etapas de ganho/perda, campos obrigatórios, valor, atualização ao vivo) estão comentadas no `.env.example`, com os mesmos nomes das variáveis do Docker trocando `KANBANWOOT_` por `REACT_APP_`.
+
+> Neste modo o token vai para o navegador: use só para desenvolvimento. `REACT_APP_DEBUG=true` liga os logs `[DEBUG]` no console.
+
+### CORS no Chatwoot (só para desenvolvimento local)
+
+Com o Docker não há CORS: o navegador só fala com o próprio domínio. Já no `npm start` o navegador chama o Chatwoot direto, de outro endereço, e o Chatwoot precisa liberar essa origem.
+
+Crie o arquivo `/app/config/initializers/cors.rb` no container do Chatwoot (no Easypanel, use uma montagem de arquivo em **Mounts** para ele não sumir ao reiniciar) e reinicie o Chatwoot:
+
+```ruby
+Rails.application.config.middleware.insert_before 0, Rack::Cors do
+  allow do
+    origins 'http://localhost:3000'
+
+    resource '*',
+      headers: :any,
+      methods: [:get, :post, :put, :patch, :delete, :options, :head]
+  end
+end
+```
+
+Troque `origins` pelo endereço de onde você roda o KanbanWoot. Não use `*`.
+
+---
+
 ## 🖇️ Como incorporar o KanbanWoot no Chatwoot (Painel de Aplicativos)
 
 Você pode exibir o KanbanWoot diretamente no painel lateral do Chatwoot para que os agentes tenham acesso rápido ao funil de contatos.
@@ -328,7 +377,25 @@ Você pode exibir o KanbanWoot diretamente no painel lateral do Chatwoot para qu
 
 ---
 
+## 🩺 Solução de problemas
+
+| Sintoma | Causa provável e solução |
+|---|---|
+| Container não sobe; log com `Erro: variáveis obrigatórias não definidas` | Falta variável do modo escolhido. `session`: `CHATWOOT_ACCOUNT_ID`. `proxy`: `CHATWOOT_URL`, `CHATWOOT_TOKEN` e `CHATWOOT_ACCOUNT_ID`. |
+| "Você não está logado no Chatwoot" (modo `session`) | Entre no Chatwoot no mesmo navegador e recarregue. Se continuar, confira se o KanbanWoot está no **mesmo host** do Chatwoot (`chat.empresa.com/kanban/`, não `kanban.empresa.com`). |
+| "Seu usuário do Chatwoot não tem acesso à conta N" | `CHATWOOT_ACCOUNT_ID` não é uma conta do agente logado. Confira o número na URL do painel do Chatwoot. |
+| Página em branco ou sem estilo em `/kanban` | Acesse com a barra final (`/kanban/`) e confira `KANBANWOOT_BASE_PATH=/kanban`. |
+| "Nenhum atributo customizado do tipo lista encontrado" | Crie o atributo de contato do tipo **Lista** (passo 1) e confira se ele tem valores. |
+| Colunas vazias, mas há contatos | Contatos com valor fora da lista ou vazio não aparecem. Se existir o atributo `kanbanwoot`, só os contatos marcados com ele entram. |
+| Erro ao mover card / `401` ou `403` (modo `proxy`) | Token inválido ou sem permissão; gere outro em Configurações de Perfil → Token de Acesso e atualize `CHATWOOT_TOKEN`. |
+| Erro de CORS no console (`npm start`) | Libere a origem no Chatwoot, veja [CORS no Chatwoot](#cors-no-chatwoot-só-para-desenvolvimento-local). |
+| `npm: command not found` / `'npm' não é reconhecido` | Instale o Node.js 18+ e reabra o terminal. |
+| Mudou uma variável e nada mudou | As variáveis são lidas ao iniciar o container: faça restart/redeploy. No `npm start`, pare e rode de novo. |
+
+---
+
 ## 🔧 Melhorias futuras
 
-- Filtragem por tags, agentes ou inbox
-- Integração com histórico de conversas
+- Relatórios de funil (conversão, tempo médio por etapa, ganhos/perdas por motivo), com histórico de movimentações
+- Mais de um negócio por contato (oportunidades)
+- Filtros por agente e caixa de entrada (dados da conversa, não do contato)
