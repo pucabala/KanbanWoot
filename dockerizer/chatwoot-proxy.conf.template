@@ -1,0 +1,9 @@
+# Configuração comum das rotas /chatwoot-api/* (gerada pelo entrypoint.sh)
+rewrite ^/chatwoot-api/(.*)$ /api/v1/accounts/${CHATWOOT_ACCOUNT_ID}/$1 break;
+proxy_pass ${CHATWOOT_URL};
+proxy_ssl_server_name on;
+proxy_set_header api_access_token "${CHATWOOT_TOKEN}";
+proxy_set_header Cookie "";
+proxy_set_header Authorization "";
+proxy_set_header Origin "";
+proxy_set_header Referer "";

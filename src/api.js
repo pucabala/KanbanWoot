@@ -9,13 +9,17 @@ const env = {
 };
 const CHATWOOT_URL = (env.REACT_APP_CHATWOOT_URL || '').replace(/\/+$/, '');
 const ACCOUNT_ID = env.REACT_APP_CHATWOOT_ACCOUNT_ID;
-const chatwootHeaders = {
-  'Content-Type': 'application/json',
-  api_access_token: env.REACT_APP_CHATWOOT_TOKEN
-};
+// No Docker, as chamadas passam pelo proxy do nginx, que injeta o token no servidor
+const PROXY_PATH = (runtimeEnv.REACT_APP_CHATWOOT_PROXY || '').replace(/\/+$/, '');
+const USE_PROXY = !process.env.REACT_APP_CHATWOOT_URL && Boolean(PROXY_PATH);
+const chatwootHeaders = USE_PROXY
+  ? { 'Content-Type': 'application/json' }
+  : { 'Content-Type': 'application/json', api_access_token: env.REACT_APP_CHATWOOT_TOKEN };
 
 async function chatwootFetch(endpoint, options = {}) {
-  const url = `${CHATWOOT_URL}/api/v1/accounts/${ACCOUNT_ID}${endpoint}`;
+  const url = USE_PROXY
+    ? `${PROXY_PATH}${endpoint}`
+    : `${CHATWOOT_URL}/api/v1/accounts/${ACCOUNT_ID}${endpoint}`;
   debugLog('chatwootFetch', url, options);
   try {
     const response = await fetch(url, { ...options, headers: chatwootHeaders });
