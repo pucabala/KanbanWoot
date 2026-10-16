@@ -50,17 +50,44 @@ debugLog('api.js: módulo carregado');
 export async function getContacts() {
   debugLog('api.js: getContacts chamado');
   try {
-    // A API do Chatwoot pagina /contacts (15 por página); busca todas as páginas
-    const all = [];
-    const MAX_PAGES = 1000; // trava de segurança contra loop infinito
-    for (let page = 1; page <= MAX_PAGES; page++) {
-      const data = await chatwootFetch(`/contacts?page=${page}`);
-      const items = data?.payload || [];
-      all.push(...items);
-      const total = data?.meta?.count;
-      if (!items.length || (typeof total === 'number' && all.length >= total)) break;
+    // A API do Chatwoot pagina /contacts; busca a 1ª página e depois as demais em paralelo
+    const MAX_PAGES = 1000; // trava de segurança
+    const CONCURRENCY = 5; // requisições simultâneas, para não sobrecarregar a API
+    const first = await chatwootFetch('/contacts?page=1');
+    const all = [...(first?.payload || [])];
+    const total = first?.meta?.count;
+    const pageSize = all.length;
+    if (!pageSize) return all;
+
+    if (typeof total !== 'number') {
+      // Sem meta.count: segue sequencialmente até uma página vazia
+      for (let page = 2; page <= MAX_PAGES; page++) {
+        const data = await chatwootFetch(`/contacts?page=${page}`);
+        const items = data?.payload || [];
+        if (!items.length) break;
+        all.push(...items);
+      }
+      return all;
     }
-    return all;
+
+    const totalPages = Math.min(Math.ceil(total / pageSize), MAX_PAGES);
+    const pages = [];
+    for (let page = 2; page <= totalPages; page++) pages.push(page);
+    const results = new Array(pages.length);
+    let next = 0;
+    async function worker() {
+      while (next < pages.length) {
+        const i = next++;
+        const data = await chatwootFetch(`/contacts?page=${pages[i]}`);
+        results[i] = data?.payload || [];
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pages.length) }, worker));
+    results.forEach(items => all.push(...items));
+
+    // Remove duplicados caso a lista mude durante a paginação
+    const seen = new Set();
+    return all.filter(c => (seen.has(c.id) ? false : seen.add(c.id)));
   } catch (error) {
     debugLog('Erro ao buscar contatos:', error);
     throw error;
