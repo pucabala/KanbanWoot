@@ -1,3 +1,19 @@
+import { debugLog } from './debug';
+
+// Variáveis do .env (dev local) com fallback para o .env.js (runtime/Docker, onde o .env não entra no build)
+const runtimeEnv = window._env_ || {};
+const env = {
+  REACT_APP_CHATWOOT_URL: process.env.REACT_APP_CHATWOOT_URL || runtimeEnv.REACT_APP_CHATWOOT_URL,
+  REACT_APP_CHATWOOT_ACCOUNT_ID: process.env.REACT_APP_CHATWOOT_ACCOUNT_ID || runtimeEnv.REACT_APP_CHATWOOT_ACCOUNT_ID,
+  REACT_APP_CHATWOOT_TOKEN: process.env.REACT_APP_CHATWOOT_TOKEN || runtimeEnv.REACT_APP_CHATWOOT_TOKEN
+};
+const CHATWOOT_URL = (env.REACT_APP_CHATWOOT_URL || '').replace(/\/+$/, '');
+const ACCOUNT_ID = env.REACT_APP_CHATWOOT_ACCOUNT_ID;
+const chatwootHeaders = {
+  'Content-Type': 'application/json',
+  api_access_token: env.REACT_APP_CHATWOOT_TOKEN
+};
+
 async function chatwootFetch(endpoint, options = {}) {
   const url = `${CHATWOOT_URL}/api/v1/accounts/${ACCOUNT_ID}${endpoint}`;
   debugLog('chatwootFetch', url, options);
@@ -39,8 +55,44 @@ debugLog('api.js: módulo carregado');
 export async function getContacts() {
   debugLog('api.js: getContacts chamado');
   try {
-    const data = await chatwootFetch('/contacts');
-    return data.payload || [];
+    // A API do Chatwoot pagina /contacts; busca a 1ª página e depois as demais em paralelo
+    const MAX_PAGES = 1000; // trava de segurança
+    const CONCURRENCY = 5; // requisições simultâneas, para não sobrecarregar a API
+    const first = await chatwootFetch('/contacts?page=1');
+    const all = [...(first?.payload || [])];
+    const total = first?.meta?.count;
+    const pageSize = all.length;
+    if (!pageSize) return all;
+
+    if (typeof total !== 'number') {
+      // Sem meta.count: segue sequencialmente até uma página vazia
+      for (let page = 2; page <= MAX_PAGES; page++) {
+        const data = await chatwootFetch(`/contacts?page=${page}`);
+        const items = data?.payload || [];
+        if (!items.length) break;
+        all.push(...items);
+      }
+      return all;
+    }
+
+    const totalPages = Math.min(Math.ceil(total / pageSize), MAX_PAGES);
+    const pages = [];
+    for (let page = 2; page <= totalPages; page++) pages.push(page);
+    const results = new Array(pages.length);
+    let next = 0;
+    async function worker() {
+      while (next < pages.length) {
+        const i = next++;
+        const data = await chatwootFetch(`/contacts?page=${pages[i]}`);
+        results[i] = data?.payload || [];
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pages.length) }, worker));
+    results.forEach(items => all.push(...items));
+
+    // Remove duplicados caso a lista mude durante a paginação
+    const seen = new Set();
+    return all.filter(c => (seen.has(c.id) ? false : seen.add(c.id)));
   } catch (error) {
     debugLog('Erro ao buscar contatos:', error);
     throw error;
@@ -89,4 +141,13 @@ export async function updateContactCustomAttribute(contactId, attributeKey, valu
     debugLog('Erro ao atualizar atributo customizado:', error);
     throw error;
   }
+}
+
+// Remove atributos customizados do contato
+export async function removeContactCustomAttributes(contactId, attributeKeys) {
+  debugLog('api.js: removeContactCustomAttributes chamado', contactId, attributeKeys);
+  return chatwootFetch(`/contacts/${contactId}/destroy_custom_attributes`, {
+    method: 'POST',
+    body: JSON.stringify({ custom_attributes: attributeKeys })
+  });
 }

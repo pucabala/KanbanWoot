@@ -8,7 +8,6 @@ import ErrorMessage from './ErrorMessage';
 import { useKanbanData } from '../hooks/useKanbanData';
 import KanbanColumn from './KanbanColumn';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { getCustomAttributes } from '../api';
 
 function KanbanBoard() {
   // Hook customizado para buscar contatos, colunas e atributo selecionado
@@ -19,24 +18,6 @@ function KanbanBoard() {
   const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
-
-  // Carrega e memoiza os display_names dos atributos kbw_ apenas uma vez para todo o board
-  const [attrDisplayNames, setAttrDisplayNames] = React.useState({});
-  React.useEffect(() => {
-    let mounted = true;
-    async function fetchDisplayNames() {
-      const defs = await getCustomAttributes();
-      const map = {};
-      defs.forEach(def => {
-        if (def.attribute_key && def.attribute_key.startsWith('kbw_')) {
-          map[def.attribute_key] = def.attribute_display_name || def.attribute_key;
-        }
-      });
-      if (mounted) setAttrDisplayNames(map);
-    }
-    fetchDisplayNames();
-    return () => { mounted = false; };
-  }, []);
 
   // Organiza os contatos nas colunas sempre que dados mudam
   useEffect(() => {
