@@ -1,20 +1,22 @@
 // OutcomeDialog.jsx
 // Pede o motivo ao mover um contato para uma etapa final (ganho ou perda)
 import React, { useEffect, useRef, useState } from 'react';
-import { LOST_REASONS } from '../api';
+import { LOST_REASONS, parseValue } from '../api';
 
 /**
  * @param {{
  *  outcome: 'won' | 'lost',
  *  contactName: string,
  *  stageLabel: string,
- *  onConfirm: (reason: string) => void,
+ *  askValue?: boolean,
+ *  onConfirm: (reason: string, dealValue?: number) => void,
  *  onCancel: () => void
  * }} props
  */
-export default function OutcomeDialog({ outcome, contactName, stageLabel, onConfirm, onCancel }) {
+export default function OutcomeDialog({ outcome, contactName, stageLabel, askValue = false, onConfirm, onCancel }) {
   const [preset, setPreset] = useState('');
   const [text, setText] = useState('');
+  const [valueText, setValueText] = useState('');
   const [error, setError] = useState('');
   const firstFieldRef = useRef(null);
   const isLost = outcome === 'lost';
@@ -38,7 +40,13 @@ export default function OutcomeDialog({ outcome, contactName, stageLabel, onConf
       setError('Informe o motivo da perda.');
       return;
     }
-    onConfirm(reason);
+    const showValue = !isLost && askValue;
+    const dealValue = showValue && valueText.trim() ? parseValue(valueText) : undefined;
+    if (dealValue === null || (typeof dealValue === 'number' && dealValue < 0)) {
+      setError('Valor inválido. Use, por exemplo, 1500 ou 1.500,00.');
+      return;
+    }
+    onConfirm(reason, dealValue);
   };
 
   return (
@@ -71,9 +79,21 @@ export default function OutcomeDialog({ outcome, contactName, stageLabel, onConf
             <option value="__other__">Outro…</option>
           </select>
         )}
+        {!isLost && askValue && (
+          <input
+            ref={firstFieldRef}
+            type="text"
+            inputMode="decimal"
+            value={valueText}
+            onChange={e => { setValueText(e.target.value); setError(''); }}
+            aria-label="Valor do negócio (opcional)"
+            placeholder="Valor do negócio (opcional), ex.: 1.500,00"
+            className="w-full border border-gray-300 rounded p-2 mb-3"
+          />
+        )}
         {useOther && (
           <textarea
-            ref={isLost && LOST_REASONS.length ? undefined : firstFieldRef}
+            ref={(isLost && LOST_REASONS.length) || (!isLost && askValue) ? undefined : firstFieldRef}
             value={text}
             onChange={e => { setText(e.target.value); setError(''); }}
             aria-label={isLost ? 'Motivo da perda' : 'Observação (opcional)'}

@@ -33,6 +33,38 @@ export function stageOutcome(stage) {
   return null;
 }
 
+// Valor do negócio: atributo numérico do contato, exibido no card e somado por coluna
+export const VALUE_ATTRIBUTE = process.env.REACT_APP_VALUE_ATTRIBUTE || runtimeEnv.REACT_APP_VALUE_ATTRIBUTE || 'kbw_valor';
+const CURRENCY = process.env.REACT_APP_CURRENCY || runtimeEnv.REACT_APP_CURRENCY || 'BRL';
+const currencyFormat = (() => {
+  try {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: CURRENCY });
+  } catch {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
+  }
+})();
+export const formatValue = value => currencyFormat.format(value);
+
+// Converte o valor salvo (número ou texto como "1.234,56", "R$ 1500", "1500.5") em número; null se não for válido
+export function parseValue(raw) {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  if (typeof raw !== 'string') return null;
+  let text = raw.replace(/[^\d,.-]/g, '');
+  if (!text) return null;
+  if (text.includes(',')) text = text.replace(/\./g, '').replace(',', '.');
+  // Mais de um ponto, ou "1.500" (ponto seguido de exatamente 3 dígitos): pontos de milhar
+  else if ((text.match(/\./g) || []).length > 1 || /^-?\d{1,3}\.\d{3}$/.test(text)) text = text.replace(/\./g, '');
+  const value = Number(text);
+  return Number.isFinite(value) ? value : null;
+}
+
+// Intervalo da atualização ao vivo, em segundos (0 desliga)
+export const REFRESH_SECONDS = (() => {
+  const raw = process.env.REACT_APP_REFRESH_SECONDS ?? runtimeEnv.REACT_APP_REFRESH_SECONDS;
+  const value = raw === undefined || raw === '' ? 30 : Number(raw);
+  return Number.isFinite(value) && value >= 0 ? value : 30;
+})();
+
 // Atributo com o motivo do ganho/perda (ex.: kbw_funil_motivo)
 export const STAGE_REASON_SUFFIX = '_motivo';
 export const stageReasonKey = attributeKey => `${attributeKey}${STAGE_REASON_SUFFIX}`;
