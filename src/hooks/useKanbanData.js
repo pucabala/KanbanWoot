@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
 
-import { getContacts, getCustomAttributes, updateContactCustomAttribute } from '../api';
+import { getContacts, getCustomAttributes, updateContactCustomAttribute, removeContactCustomAttributes } from '../api';
 
 export function useDynamicKanbanData(reloadFlag = 0) {
   const location = useLocation();
@@ -133,7 +133,7 @@ export function useDynamicKanbanData(reloadFlag = 0) {
 }
 
 // Hook para atualização de atributo customizado de contato
-export function useUpdateContactAttribute(onSuccess, attribute, contactsFromHook) {
+export function useUpdateContactAttribute(onSuccess, attribute) {
   const [updating, setUpdating] = useState(false);
   const [updateError, setUpdateError] = useState(null);
 
@@ -144,26 +144,14 @@ export function useUpdateContactAttribute(onSuccess, attribute, contactsFromHook
       setUpdating(true);
       setUpdateError(null);
       try {
-        // Usa contacts do hook se disponível, senão faz fetch
-        let contact;
-        if (Array.isArray(contactsFromHook)) {
-          contact = contactsFromHook.find(c => c.id === contactId);
-        }
-        if (!contact) {
-          const contacts = await getContacts();
-          contact = contacts.find(c => c.id === contactId);
-        }
-        const customAttrs = { ...(contact?.custom_attributes || {}) };
-        delete customAttrs[attributeKey];
-        await updateContactCustomAttribute(contactId, attributeKey, undefined); // Para compatibilidade
-        // Atualiza todo o objeto custom_attributes sem a chave
-        await updateContactCustomAttribute(contactId, '', customAttrs);
+        await removeContactCustomAttributes(contactId, [attributeKey]);
         if (typeof onSuccess === 'function') {
           onSuccess();
         }
       } catch (error) {
         setUpdateError(error);
         console.error('[DEBUG] Erro ao remover atributo do contato:', error);
+        throw error;
       } finally {
         setUpdating(false);
       }
@@ -174,7 +162,7 @@ export function useUpdateContactAttribute(onSuccess, attribute, contactsFromHook
       const errMsg = `[DEBUG] Valor inválido para coluna: "${value}". Valores permitidos: ${JSON.stringify(attribute?.attribute_values)}`;
       setUpdateError(new Error(errMsg));
       console.error(errMsg);
-      return;
+      throw new Error(errMsg);
     }
     setUpdating(true);
     setUpdateError(null);
@@ -186,6 +174,7 @@ export function useUpdateContactAttribute(onSuccess, attribute, contactsFromHook
     } catch (error) {
       setUpdateError(error);
       console.error('[DEBUG] Erro ao atualizar atributo do contato:', error);
+      throw error;
     } finally {
       setUpdating(false);
     }
@@ -204,7 +193,7 @@ export function useKanbanData() {
   // Função para forçar reload
   const reloadKanban = () => setReloadFlag(f => f + 1);
   // Passa reloadKanban como callback de sucesso para o update e passa attribute para validação
-  const { updateContactAttribute, updating, updateError } = useUpdateContactAttribute(reloadKanban, attribute, contacts);
+  const { updateContactAttribute, updating, updateError } = useUpdateContactAttribute(reloadKanban, attribute);
 
   return {
     contacts,

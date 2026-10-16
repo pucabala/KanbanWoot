@@ -1,3 +1,14 @@
+import { debugLog } from './debug';
+
+// Variáveis vindas do .env.js (runtime/Docker) com fallback para o .env do build
+const env = { ...process.env, ...(window._env_ || {}) };
+const CHATWOOT_URL = (env.REACT_APP_CHATWOOT_URL || '').replace(/\/+$/, '');
+const ACCOUNT_ID = env.REACT_APP_CHATWOOT_ACCOUNT_ID;
+const chatwootHeaders = {
+  'Content-Type': 'application/json',
+  api_access_token: env.REACT_APP_CHATWOOT_TOKEN
+};
+
 async function chatwootFetch(endpoint, options = {}) {
   const url = `${CHATWOOT_URL}/api/v1/accounts/${ACCOUNT_ID}${endpoint}`;
   debugLog('chatwootFetch', url, options);
@@ -89,4 +100,13 @@ export async function updateContactCustomAttribute(contactId, attributeKey, valu
     debugLog('Erro ao atualizar atributo customizado:', error);
     throw error;
   }
+}
+
+// Remove atributos customizados do contato
+export async function removeContactCustomAttributes(contactId, attributeKeys) {
+  debugLog('api.js: removeContactCustomAttributes chamado', contactId, attributeKeys);
+  return chatwootFetch(`/contacts/${contactId}/destroy_custom_attributes`, {
+    method: 'POST',
+    body: JSON.stringify({ custom_attributes: attributeKeys })
+  });
 }
