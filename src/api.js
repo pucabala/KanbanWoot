@@ -58,6 +58,35 @@ export function parseValue(raw) {
   return Number.isFinite(value) ? value : null;
 }
 
+// Campos obrigatórios por etapa: "Proposta:kbw_valor,email;Ganho:kbw_valor"
+// Campos padrão do contato aceitos: name, email, phone_number; o resto são atributos customizados
+export const STANDARD_CONTACT_FIELDS = {
+  name: { label: 'Nome', type: 'text' },
+  email: { label: 'E-mail', type: 'email' },
+  phone_number: { label: 'Telefone', type: 'tel' }
+};
+const REQUIRED_FIELDS = (() => {
+  const raw = process.env.REACT_APP_REQUIRED_FIELDS || runtimeEnv.REACT_APP_REQUIRED_FIELDS || '';
+  const map = new Map();
+  raw.split(';').forEach(rule => {
+    const sep = rule.lastIndexOf(':');
+    if (sep < 1) return;
+    const stage = rule.slice(0, sep).trim().toLocaleLowerCase('pt-BR');
+    const keys = rule.slice(sep + 1).split(',').map(k => k.trim()).filter(Boolean);
+    if (stage && keys.length) map.set(stage, [...new Set([...(map.get(stage) || []), ...keys])]);
+  });
+  return map;
+})();
+export function requiredFieldsFor(stage) {
+  return REQUIRED_FIELDS.get(String(stage).trim().toLocaleLowerCase('pt-BR')) || [];
+}
+
+// Valor de um campo no contato (padrão ou customizado)
+export function contactFieldValue(contact, key) {
+  return key in STANDARD_CONTACT_FIELDS ? contact?.[key] : contact?.custom_attributes?.[key];
+}
+export const isEmptyValue = value => value === undefined || value === null || (typeof value === 'string' && value.trim() === '');
+
 // Intervalo da atualização ao vivo, em segundos (0 desliga)
 export const REFRESH_SECONDS = (() => {
   const raw = process.env.REACT_APP_REFRESH_SECONDS ?? runtimeEnv.REACT_APP_REFRESH_SECONDS;
@@ -286,12 +315,13 @@ export async function getCustomAttributeById(id) {
   }
 }
 
-// Atualiza vários atributos customizados do contato de uma vez (o Chatwoot mescla com os existentes)
-export async function updateContactCustomAttributes(contactId, attributes) {
-  debugLog('api.js: updateContactCustomAttributes chamado', contactId, attributes);
+// Atualiza vários atributos customizados do contato de uma vez (o Chatwoot mescla com os existentes);
+// standardFields: campos padrão (name, email, phone_number) a gravar na mesma requisição
+export async function updateContactCustomAttributes(contactId, attributes, standardFields = {}) {
+  debugLog('api.js: updateContactCustomAttributes chamado', contactId, attributes, standardFields);
   return chatwootFetch(`/contacts/${contactId}`, {
     method: 'PUT',
-    body: JSON.stringify({ custom_attributes: attributes })
+    body: JSON.stringify({ ...standardFields, custom_attributes: attributes })
   });
 }
 

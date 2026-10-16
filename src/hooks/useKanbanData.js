@@ -11,6 +11,10 @@ import {
   stageOutcome,
   VALUE_ATTRIBUTE,
   REFRESH_SECONDS,
+  STANDARD_CONTACT_FIELDS,
+  requiredFieldsFor,
+  contactFieldValue,
+  isEmptyValue,
   removeContactCustomAttributes,
   UNASSIGNED_STAGE,
   KANBANWOOT_FLAG_KEY,
@@ -226,8 +230,9 @@ export function useKanbanData() {
   }, [refresh]);
 
   // Move um card: atualização otimista, desfeita se a API falhar
-  // reason: motivo do ganho/perda, quando o destino é uma etapa final; dealValue: valor informado no ganho
-  const moveContact = useCallback(async ({ contactId, source, destination, sourceIndex, destinationIndex, reason, dealValue }) => {
+  // reason: motivo do ganho/perda, quando o destino é uma etapa final; dealValue: valor informado no ganho;
+  // fieldValues: campos obrigatórios da etapa preenchidos no diálogo ({ chave: valor })
+  const moveContact = useCallback(async ({ contactId, source, destination, sourceIndex, destinationIndex, reason, dealValue, fieldValues = {} }) => {
     if (source === destination) {
       changeVersionRef.current += 1;
       dispatch({ type: 'MOVE_CARD', payload: { source, destination, contactId, index: destinationIndex } });
@@ -259,22 +264,39 @@ export function useKanbanData() {
       else if (current[reasonKey] != null) next[reasonKey] = null;
       if (typeof dealValue === 'number' && Number.isFinite(dealValue)) next[VALUE_ATTRIBUTE] = dealValue;
     }
+    // Campos obrigatórios: padrão vão no corpo do PUT, customizados em custom_attributes
+    const standardNext = {};
+    const standardPrevious = {};
+    if (typeof value !== 'undefined') {
+      Object.entries(fieldValues).forEach(([key, fieldValue]) => {
+        if (key in STANDARD_CONTACT_FIELDS) {
+          standardNext[key] = fieldValue;
+          standardPrevious[key] = contact?.[key];
+        } else {
+          next[key] = fieldValue;
+          if (!(key in previous)) previous[key] = current[key];
+        }
+      });
+      const merged = { ...contact, ...standardNext, custom_attributes: { ...current, ...next } };
+      const missing = requiredFieldsFor(value).filter(key => isEmptyValue(contactFieldValue(merged, key)));
+      if (missing.length) throw new Error(`Preencha antes de mover: ${missing.join(', ')}`);
+    }
     changeVersionRef.current += 1;
     movesInFlightRef.current += 1;
     dispatch({
       type: 'MOVE_CARD',
-      payload: { source, destination, contactId, index: destinationIndex, attributes: next }
+      payload: { source, destination, contactId, index: destinationIndex, attributes: next, fields: standardNext }
     });
     try {
       if (typeof value === 'undefined') {
         await removeContactCustomAttributes(contactId, [attributeKey, sinceKey, reasonKey]);
       } else {
-        await updateContactCustomAttributes(contactId, next);
+        await updateContactCustomAttributes(contactId, next, standardNext);
       }
     } catch (err) {
       dispatch({
         type: 'MOVE_CARD',
-        payload: { source: destination, destination: source, contactId, index: sourceIndex, attributes: previous }
+        payload: { source: destination, destination: source, contactId, index: sourceIndex, attributes: previous, fields: standardPrevious }
       });
       throw err;
     } finally {
@@ -285,6 +307,6 @@ export function useKanbanData() {
 
   return {
     agent, board, columns, attribute, listAttributes, displayNames, loading, error, loadMore, moveContact,
-    filters, setFilters, labels, refresh, lastRefresh, setLivePaused
+    filters, setFilters, labels, refresh, lastRefresh, setLivePaused, attributeDefs: attributeDefs || []
   };
 }
