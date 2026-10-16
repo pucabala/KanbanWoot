@@ -6,15 +6,39 @@ import {
   getCustomAttributes,
   updateContactCustomAttribute,
   removeContactCustomAttributes,
-  UNASSIGNED_STAGE
+  UNASSIGNED_STAGE,
+  KANBANWOOT_FLAG_KEY
 } from '../api';
 import { kanbanReducer } from '../reducers/kanbanReducer';
 
-// Escolhe o atributo: parâmetro ?kbw= da URL, depois o primeiro lista "kbw_", depois qualquer lista
-function selectAttribute(attrs, param) {
+// Cookie com o último atributo escolhido
+const ATTRIBUTE_COOKIE = 'kbw';
+
+function readAttributeCookie() {
+  try {
+    const entry = document.cookie.split('; ').find(c => c.startsWith(`${ATTRIBUTE_COOKIE}=`));
+    return entry ? decodeURIComponent(entry.slice(ATTRIBUTE_COOKIE.length + 1)) : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveAttributeCookie(key) {
+  try {
+    // SameSite=None; Secure permite gravar/ler dentro do iframe do Painel de Aplicativos do Chatwoot (HTTPS)
+    const sameSite = window.location.protocol === 'https:' ? 'SameSite=None; Secure' : 'SameSite=Lax';
+    document.cookie = `${ATTRIBUTE_COOKIE}=${encodeURIComponent(key)}; max-age=${365 * 24 * 3600}; path=/; ${sameSite}`;
+  } catch {
+    // Cookies bloqueados: segue sem lembrar a escolha
+  }
+}
+
+// Escolhe o atributo: parâmetro ?kbw= da URL, depois o cookie, depois o primeiro lista "kbw_", depois qualquer lista
+function selectAttribute(attrs, param, remembered) {
   const lists = attrs.filter(a => a.attribute_display_type === 'list' && a.attribute_values?.length);
   return (
     (param && lists.find(a => a.attribute_key === param)) ||
+    (remembered && lists.find(a => a.attribute_key === remembered)) ||
     lists.find(a => a.attribute_key.startsWith('kbw_')) ||
     lists[0] ||
     null
@@ -56,7 +80,7 @@ export function useKanbanData() {
   );
 
   const attribute = useMemo(() => {
-    const selected = selectAttribute(attributeDefs || [], param);
+    const selected = selectAttribute(attributeDefs || [], param, readAttributeCookie());
     return selected
       ? { attribute_key: selected.attribute_key, attribute_values: selected.attribute_values }
       : null;
@@ -71,6 +95,17 @@ export function useKanbanData() {
   }, [attributeDefs]);
 
   const attributeKey = attribute?.attribute_key;
+
+  // Lembra o atributo exibido (vindo da URL ou do dropdown) para a próxima visita
+  useEffect(() => {
+    if (attributeKey) saveAttributeCookie(attributeKey);
+  }, [attributeKey]);
+
+  // Se o atributo "kanbanwoot" existe na conta, só entram no board os contatos marcados com ele
+  const onlyFlagged = useMemo(
+    () => (attributeDefs || []).some(a => a.attribute_key === KANBANWOOT_FLAG_KEY),
+    [attributeDefs]
+  );
   const columns = useMemo(
     () => (attribute ? [UNASSIGNED_STAGE, ...attribute.attribute_values] : []),
     [attribute]
@@ -85,7 +120,7 @@ export function useKanbanData() {
     const page = col.page + 1;
     dispatch({ type: 'STAGE_LOADING', payload: { stage } });
     try {
-      const { contacts, count } = await getContactsByStage(attributeKey, stage, page);
+      const { contacts, count } = await getContactsByStage(attributeKey, stage, page, { onlyFlagged });
       if (generation !== generationRef.current) return;
       dispatch({ type: 'STAGE_LOADED', payload: { stage, page, contacts, count } });
     } catch (err) {
@@ -95,7 +130,7 @@ export function useKanbanData() {
     } finally {
       if (generation === generationRef.current) inFlightRef.current.delete(stage);
     }
-  }, [attributeKey]);
+  }, [attributeKey, onlyFlagged]);
 
   // Ao trocar de atributo: zera o board e carrega a 1ª página de cada coluna em paralelo
   useEffect(() => {
