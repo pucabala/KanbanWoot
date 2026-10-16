@@ -9,17 +9,62 @@ const env = {
 };
 const CHATWOOT_URL = (env.REACT_APP_CHATWOOT_URL || '').replace(/\/+$/, '');
 const ACCOUNT_ID = env.REACT_APP_CHATWOOT_ACCOUNT_ID;
-// No Docker, as chamadas passam pelo proxy do nginx, que injeta o token no servidor
-const PROXY_PATH = (runtimeEnv.REACT_APP_CHATWOOT_PROXY || '').replace(/\/+$/, '');
-const USE_PROXY = !process.env.REACT_APP_CHATWOOT_URL && Boolean(PROXY_PATH);
-const chatwootHeaders = USE_PROXY
-  ? { 'Content-Type': 'application/json' }
-  : { 'Content-Type': 'application/json', api_access_token: env.REACT_APP_CHATWOOT_TOKEN };
 
-async function chatwootFetch(endpoint, options = {}) {
-  const url = USE_PROXY
-    ? `${PROXY_PATH}${endpoint}`
-    : `${CHATWOOT_URL}/api/v1/accounts/${ACCOUNT_ID}${endpoint}`;
+// Modos de autenticação:
+// - 'session': o KanbanWoot é servido no mesmo domínio do Chatwoot e usa a sessão do agente logado
+// - 'proxy':   (Docker) o nginx do KanbanWoot repassa as chamadas e injeta o token de serviço
+// - 'token':   (dev local) o token do .env vai direto do navegador para o Chatwoot
+const PROXY_PATH = (runtimeEnv.REACT_APP_CHATWOOT_PROXY || '').replace(/\/+$/, '');
+export const AUTH_MODE = (process.env.REACT_APP_AUTH_MODE || runtimeEnv.REACT_APP_AUTH_MODE) === 'session'
+  ? 'session'
+  : (!process.env.REACT_APP_CHATWOOT_URL && PROXY_PATH ? 'proxy' : 'token');
+
+// Cookie em que o painel do Chatwoot guarda a sessão do agente (mesmo domínio)
+const CHATWOOT_SESSION_COOKIE = 'cw_d_session_info';
+const SESSION_HEADER_KEYS = ['access-token', 'token-type', 'client', 'expiry', 'uid'];
+
+// Endereço da tela de login do Chatwoot (modo sessão: mesmo domínio)
+export const CHATWOOT_LOGIN_URL = '/app/login';
+
+function notLoggedInError() {
+  const error = new Error('Você não está logado no Chatwoot.');
+  error.status = 401;
+  error.code = 'NOT_LOGGED_IN';
+  return error;
+}
+
+// Lê os headers de autenticação da sessão do Chatwoot (relidos a cada chamada: o agente pode ter trocado de conta)
+function getSessionHeaders() {
+  let session = null;
+  try {
+    const entry = document.cookie.split('; ').find(c => c.startsWith(`${CHATWOOT_SESSION_COOKIE}=`));
+    if (entry) session = JSON.parse(decodeURIComponent(entry.slice(CHATWOOT_SESSION_COOKIE.length + 1)));
+  } catch {
+    session = null;
+  }
+  if (!session || !session['access-token'] || !session.client || !session.uid) throw notLoggedInError();
+  const headers = {};
+  SESSION_HEADER_KEYS.forEach(key => {
+    if (session[key]) headers[key] = String(session[key]);
+  });
+  return headers;
+}
+
+function buildRequest(endpoint, { accountScoped = true } = {}) {
+  const base = { 'Content-Type': 'application/json' };
+  if (AUTH_MODE === 'session') {
+    const prefix = accountScoped ? `/api/v1/accounts/${ACCOUNT_ID}` : '/api/v1';
+    return { url: `${prefix}${endpoint}`, headers: { ...base, ...getSessionHeaders() } };
+  }
+  if (AUTH_MODE === 'proxy') {
+    return { url: `${PROXY_PATH}${endpoint}`, headers: base };
+  }
+  const prefix = accountScoped ? `/api/v1/accounts/${ACCOUNT_ID}` : '/api/v1';
+  return { url: `${CHATWOOT_URL}${prefix}${endpoint}`, headers: { ...base, api_access_token: env.REACT_APP_CHATWOOT_TOKEN } };
+}
+
+async function chatwootFetch(endpoint, options = {}, requestOptions = {}) {
+  const { url, headers: chatwootHeaders } = buildRequest(endpoint, requestOptions);
   debugLog('chatwootFetch', url, options);
   try {
     const response = await fetch(url, { ...options, headers: chatwootHeaders });
@@ -31,13 +76,13 @@ async function chatwootFetch(endpoint, options = {}) {
       responseData = responseText;
     }
     if (!response.ok) {
+      if (AUTH_MODE === 'session' && response.status === 401) throw notLoggedInError();
       const errorDetails = {
         message: `Erro na API: ${url} ${response.status}`,
         status: response.status,
         url,
         method: options.method || 'GET',
         requestBody: options.body,
-        headers: chatwootHeaders,
         response: responseData,
         stack: (new Error()).stack
       };
@@ -54,6 +99,19 @@ async function chatwootFetch(endpoint, options = {}) {
 }
 
 debugLog('api.js: módulo carregado');
+
+// Modo sessão: confere quem é o agente logado e se ele tem acesso à conta configurada
+export async function getCurrentAgent() {
+  const profile = await chatwootFetch('/profile', {}, { accountScoped: false });
+  const accounts = Array.isArray(profile?.accounts) ? profile.accounts : [];
+  if (!accounts.some(acc => String(acc.id) === String(ACCOUNT_ID))) {
+    const error = new Error(`Seu usuário do Chatwoot não tem acesso à conta ${ACCOUNT_ID}.`);
+    error.status = 403;
+    error.code = 'NO_ACCOUNT_ACCESS';
+    throw error;
+  }
+  return { id: profile.id, name: profile.name, email: profile.email };
+}
 
 // Coluna especial para contatos sem valor no atributo selecionado
 export const UNASSIGNED_STAGE = 'Não definido';

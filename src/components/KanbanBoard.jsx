@@ -7,10 +7,11 @@ import ErrorMessage from './ErrorMessage';
 import { useKanbanData } from '../hooks/useKanbanData';
 import KanbanColumn from './KanbanColumn';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { CHATWOOT_LOGIN_URL } from '../api';
 
 function KanbanBoard() {
   // Colunas carregadas página a página, filtradas no servidor
-  const { board, columns, attribute, loading, error, listAttributes, displayNames, loadMore, moveContact } = useKanbanData();
+  const { agent, board, columns, attribute, loading, error, listAttributes, displayNames, loadMore, moveContact } = useKanbanData();
   // Estado para notificações de erro/sucesso
   const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
@@ -47,6 +48,16 @@ function KanbanBoard() {
 
   // Exibe loading, erro ou o board
   if (loading) return <div className="p-4">Carregando Kanban...</div>;
+  if (error?.code === 'NOT_LOGGED_IN') {
+    return (
+      <div role="alert" className="m-6 bg-yellow-50 border border-yellow-300 text-yellow-900 px-4 py-3 rounded">
+        <p className="font-semibold">Você não está logado no Chatwoot.</p>
+        <p className="mt-1">
+          <a href={CHATWOOT_LOGIN_URL} target="_top" className="underline">Entre no Chatwoot</a> e depois recarregue esta página.
+        </p>
+      </div>
+    );
+  }
   if (error) return <ErrorMessage message={`Erro ao carregar dados: ${error.message}`} />;
   if (!attribute) return <ErrorMessage message="Nenhum atributo customizado do tipo lista encontrado." />;
 
@@ -55,7 +66,8 @@ function KanbanBoard() {
       {/* Notificação de erro/sucesso */}
       {notification && <Notification type={notification.type} message={notification.message} />}
       {/* Dropdown para seleção de atributo */}
-      <div className="mb-4">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+        <div>
         <label htmlFor="attribute-select" className="block text-sm font-medium text-gray-700 mb-1">
           Selecione o atributo:
         </label>
@@ -71,6 +83,8 @@ function KanbanBoard() {
             </option>
           ))}
         </select>
+        </div>
+        {agent && <span className="text-sm text-gray-500">Conectado como {agent.name || agent.email}</span>}
       </div>
 
       <DragDropContext onDragEnd={onDragEnd}>
