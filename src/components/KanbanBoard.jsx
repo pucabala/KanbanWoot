@@ -7,15 +7,18 @@ import ErrorMessage from './ErrorMessage';
 import { useKanbanData } from '../hooks/useKanbanData';
 import KanbanColumn from './KanbanColumn';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { CHATWOOT_LOGIN_URL, UNASSIGNED_STAGE, stageOutcome, VALUE_ATTRIBUTE, parseValue } from '../api';
+import {
+  CHATWOOT_LOGIN_URL, UNASSIGNED_STAGE, stageOutcome, VALUE_ATTRIBUTE, parseValue,
+  STANDARD_CONTACT_FIELDS, requiredFieldsFor, contactFieldValue, isEmptyValue
+} from '../api';
 import { useChatwootContext } from '../hooks/useChatwootContext';
-import OutcomeDialog from './OutcomeDialog';
+import MoveDialog from './MoveDialog';
 
 function KanbanBoard() {
   // Colunas carregadas página a página, filtradas no servidor
   const {
     agent, board, columns, attribute, loading, error, listAttributes, displayNames, loadMore, moveContact,
-    filters, setFilters, labels, refresh, lastRefresh, setLivePaused
+    filters, setFilters, labels, refresh, lastRefresh, setLivePaused, attributeDefs
   } = useKanbanData();
   // Estado para notificações de erro/sucesso
   const [notification, setNotification] = useState(null);
@@ -42,18 +45,36 @@ function KanbanBoard() {
     }
   };
 
-  // Etapas finais (ganho/perda) pedem o motivo antes de mover
+  // Descrição de um campo para o formulário: padrão do contato ou atributo customizado
+  const describeField = key => {
+    if (key in STANDARD_CONTACT_FIELDS) return { key, ...STANDARD_CONTACT_FIELDS[key] };
+    const def = attributeDefs.find(a => a.attribute_key === key);
+    return {
+      key,
+      label: def?.attribute_display_name || displayNames[key] || key,
+      type: def?.attribute_display_type || 'text',
+      options: def?.attribute_values
+    };
+  };
+
+  // Antes de mover, abre o formulário se a etapa de destino pede motivo (ganho/perda) ou campos obrigatórios
   const [pendingMove, setPendingMove] = useState(null);
   const requestMove = move => {
-    const outcome = move.source !== move.destination ? stageOutcome(move.destination) : null;
-    if (!outcome) {
+    if (move.source === move.destination || move.destination === UNASSIGNED_STAGE) {
       performMove(move);
       return;
     }
-    // No ganho, pede o valor do negócio se o contato ainda não tem
     const contact = board[move.source]?.contacts.find(c => c.id === move.contactId);
-    const askValue = outcome === 'won' && parseValue(contact?.custom_attributes?.[VALUE_ATTRIBUTE]) === null;
-    setPendingMove({ ...move, outcome, askValue });
+    const outcome = stageOutcome(move.destination);
+    const missing = requiredFieldsFor(move.destination).filter(key => isEmptyValue(contactFieldValue(contact, key)));
+    if (!outcome && !missing.length) {
+      performMove(move);
+      return;
+    }
+    // No ganho, pede o valor do negócio se o contato ainda não tem (a menos que já seja um campo obrigatório)
+    const askValue = outcome === 'won' && !missing.includes(VALUE_ATTRIBUTE)
+      && parseValue(contact?.custom_attributes?.[VALUE_ATTRIBUTE]) === null;
+    setPendingMove({ ...move, outcome, askValue, fields: missing.map(describeField) });
   };
 
   // A atualização ao vivo fica pausada durante um arraste ou com o diálogo aberto
@@ -216,16 +237,17 @@ function KanbanBoard() {
       </DragDropContext>
 
       {pendingMove && (
-        <OutcomeDialog
+        <MoveDialog
           outcome={pendingMove.outcome}
           contactName={pendingMove.contactName}
           stageLabel={displayNames[pendingMove.destination] || pendingMove.destination}
           askValue={pendingMove.askValue}
+          fields={pendingMove.fields}
           onCancel={() => setPendingMove(null)}
-          onConfirm={(reason, dealValue) => {
-            const { outcome, contactName, askValue, ...move } = pendingMove;
+          onConfirm={({ reason, dealValue, fieldValues }) => {
+            const { outcome, contactName, askValue, fields, ...move } = pendingMove;
             setPendingMove(null);
-            performMove({ ...move, reason, dealValue });
+            performMove({ ...move, reason, dealValue, fieldValues });
           }}
         />
       )}

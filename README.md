@@ -16,6 +16,8 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 - 🏁 Etapas de ganho e perda com motivo (obrigatório na perda), exibido no card
 - 🎯 Dentro do Painel de Aplicativos, destaca o card do contato da conversa aberta
 - 💰 Valor do negócio no card e total por coluna
+- 📋 Campos obrigatórios por etapa, pedidos num formulário ao mover o card
+- 🤖 Automação ao mudar de etapa com n8n (mensagem, nota e etiquetas), com fluxo pronto para importar
 - 🔄 Atualização ao vivo: mudanças feitas por outros agentes aparecem sozinhas
 - ⚡ Movimentação otimista: o card muda de coluna na hora e volta, com aviso, se a API recusar
 - ✅ Filtro opcional pelo atributo `kanbanwoot` para escolher quais contatos entram no board
@@ -74,6 +76,19 @@ Dentro do Painel de Aplicativos, o KanbanWoot pergunta ao Chatwoot qual contato 
 
 As mensagens só são aceitas da página que contém o KanbanWoot e da origem do Chatwoot (a do próprio app no modo `session`; a de `CHATWOOT_PUBLIC_URL` no modo `proxy`). Esse contexto não é assinado pelo Chatwoot e serve só para o destaque, nunca para autenticação.
 
+### Campos obrigatórios por etapa
+
+Defina em `KANBANWOOT_REQUIRED_FIELDS` quais campos precisam estar preenchidos para um contato entrar em cada etapa, no formato `Etapa:campo1,campo2;Outra etapa:campo3`. Por exemplo:
+
+```
+KANBANWOOT_REQUIRED_FIELDS=Proposta:kbw_valor,email,kbw_origem;Ganho:kbw_previsao
+```
+
+- Campos padrão do contato aceitos: `name`, `email` e `phone_number`. Os demais são chaves de atributos de contato.
+- Ao mover um card (arrastando ou pelo menu) para uma etapa com campos faltando, abre um formulário pedindo **só o que falta**, com o tipo de campo do atributo no Chatwoot: número, data, lista, sim/não, link ou texto. Em etapas de ganho/perda, os campos aparecem no mesmo formulário do motivo.
+- Os valores vão na mesma gravação da etapa. Se o Chatwoot recusar (ex.: e-mail já usado por outro contato), o card volta e nada é gravado.
+- Mover para "Não definido" nunca pede campos. Mudanças feitas fora do KanbanWoot não passam por essa regra.
+
 ### Valor do negócio
 
 O valor vem de um atributo de contato (padrão `kbw_valor`, configurável em `KANBANWOOT_VALUE_ATTRIBUTE`), de preferência do tipo número. Também são aceitos textos como `1.500,00`, `R$ 1500` ou `1500.5`. O card mostra o valor formatado (moeda em `KANBANWOOT_CURRENCY`, padrão `BRL`) e cada coluna mostra a soma.
@@ -85,6 +100,10 @@ A API do Chatwoot não soma valores, então o total é dos cards **carregados**:
 A cada `KANBANWOOT_REFRESH_SECONDS` segundos (padrão 30; `0` desliga), com a aba visível, e sempre que a aba volta a ficar visível, o KanbanWoot rebusca as páginas já carregadas de todas as colunas e troca o board de uma vez. Assim, mudanças feitas por outros agentes ou pelo próprio Chatwoot aparecem sem recarregar a página. O botão "↻ Atualizar" faz isso na hora.
 
 A atualização fica pausada enquanto um card está sendo arrastado ou com o diálogo de ganho/perda aberto, e é descartada se você mover um card ou carregar mais contatos enquanto ela está em andamento. Cada atualização refaz uma busca por página carregada em cada coluna; em boards muito grandes, aumente o intervalo.
+
+### Automação ao mudar de etapa
+
+Para enviar uma mensagem, criar uma nota ou adicionar etiquetas quando o contato entra numa etapa, use o fluxo pronto para o n8n: veja [docs/automacao-n8n.md](docs/automacao-n8n.md).
 
 ### Cards
 
@@ -244,6 +263,7 @@ No Traefik ou no Easypanel, use uma regra de caminho `/kanban` no **mesmo domín
 | `KANBANWOOT_WON_STAGES` | não | Nomes das etapas de ganho, separados por vírgula (veja "Ganho e perda") |
 | `KANBANWOOT_LOST_STAGES` | não | Nomes das etapas de perda, separados por vírgula |
 | `KANBANWOOT_LOST_REASONS` | não | Motivos de perda sugeridos, separados por vírgula |
+| `KANBANWOOT_REQUIRED_FIELDS` | não | Campos obrigatórios por etapa, ex.: `Proposta:kbw_valor,email` (veja "Campos obrigatórios por etapa") |
 | `KANBANWOOT_VALUE_ATTRIBUTE` | não | Atributo com o valor do negócio (padrão `kbw_valor`) |
 | `KANBANWOOT_CURRENCY` | não | Moeda do valor, código ISO 4217 (padrão `BRL`) |
 | `KANBANWOOT_REFRESH_SECONDS` | não | Intervalo da atualização ao vivo em segundos (padrão `30`; `0` desliga) |
@@ -274,6 +294,7 @@ docker run -d -p 3000:3000 \
 | `KANBANWOOT_WON_STAGES` | não | Nomes das etapas de ganho, separados por vírgula (veja "Ganho e perda") |
 | `KANBANWOOT_LOST_STAGES` | não | Nomes das etapas de perda, separados por vírgula |
 | `KANBANWOOT_LOST_REASONS` | não | Motivos de perda sugeridos, separados por vírgula |
+| `KANBANWOOT_REQUIRED_FIELDS` | não | Campos obrigatórios por etapa, ex.: `Proposta:kbw_valor,email` (veja "Campos obrigatórios por etapa") |
 | `KANBANWOOT_VALUE_ATTRIBUTE` | não | Atributo com o valor do negócio (padrão `kbw_valor`) |
 | `KANBANWOOT_CURRENCY` | não | Moeda do valor, código ISO 4217 (padrão `BRL`) |
 | `KANBANWOOT_REFRESH_SECONDS` | não | Intervalo da atualização ao vivo em segundos (padrão `30`; `0` desliga) |

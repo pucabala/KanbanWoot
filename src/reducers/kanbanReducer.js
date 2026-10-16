@@ -66,7 +66,8 @@ export function kanbanReducer(state, action) {
 
     case 'MOVE_CARD': {
       // attributes: { chave: valor } a atualizar no card (valor undefined remove a chave)
-      const { source, destination, contactId, index, attributes = {} } = action.payload;
+      // fields: campos padrão do contato (name, email, phone_number) a atualizar no card
+      const { source, destination, contactId, index, attributes = {}, fields = {} } = action.payload;
       const from = state[source];
       const to = state[destination];
       if (!from || !to) return state;
@@ -77,7 +78,7 @@ export function kanbanReducer(state, action) {
         if (typeof value === 'undefined' || value === null) delete customAttributes[key];
         else customAttributes[key] = value;
       });
-      const contact = { ...original, custom_attributes: customAttributes };
+      const contact = { ...original, ...fields, custom_attributes: customAttributes };
       if (source === destination) {
         const list = from.contacts.filter(c => c.id !== contactId);
         list.splice(index, 0, contact);

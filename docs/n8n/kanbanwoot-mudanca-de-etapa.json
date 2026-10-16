@@ -1,0 +1,401 @@
+{
+  "name": "KanbanWoot: ações ao mudar de etapa",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "kanbanwoot-etapa",
+        "responseMode": "onReceived",
+        "options": {
+          "rawBody": true
+        }
+      },
+      "name": "Webhook do Chatwoot",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "kanbanwoot-etapa",
+      "id": "webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Detecta a mudança de etapa no webhook \"contact_updated\" do Chatwoot e escolhe a ação.\n// ===== CONFIGURAÇÃO =====\nconst CONFIG = {\n  // URL do Chatwoot como o n8n a acessa (sem barra no final)\n  chatwootUrl: 'https://chat.empresa.com',\n  // Atributo de lista usado pelo KanbanWoot como funil\n  attributeKey: 'kbw_funil',\n  // Segredo do webhook (Chatwoot → Configurações → Integrações → Webhooks). Vazio = não verifica (não recomendado)\n  webhookSecret: '',\n  // Ações por etapa de DESTINO. {{nome}} e {{etapa}} são trocados pelo nome do contato e pela etapa.\n  // message: mensagem enviada na conversa mais recente do contato\n  // note: nota privada no contato\n  // labels: etiquetas adicionadas ao contato (as atuais são mantidas)\n  actions: {\n    'Proposta': {\n      message: 'Olá, {{nome}}! Sua proposta está em preparação e logo enviaremos os detalhes.',\n      note: 'Entrou na etapa {{etapa}} pelo KanbanWoot.',\n      labels: ['proposta']\n    },\n    'Ganho': {\n      message: 'Obrigado pela confiança, {{nome}}! Em breve entraremos em contato para os próximos passos.',\n      labels: ['cliente']\n    }\n  }\n};\n// ========================\n\nconst crypto = require('crypto');\nconst item = $input.first();\nconst headers = item.json.headers || {};\n\n// Corpo exatamente como o Chatwoot enviou (necessário para conferir a assinatura)\nconst raw = (await this.helpers.getBinaryDataBuffer(0, 'data')).toString('utf8');\n\nif (CONFIG.webhookSecret) {\n  const timestamp = headers['x-chatwoot-timestamp'];\n  const signature = headers['x-chatwoot-signature'] || '';\n  if (!timestamp || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) {\n    throw new Error('Webhook recusado: timestamp ausente ou com mais de 5 minutos');\n  }\n  const expected = 'sha256=' + crypto.createHmac('sha256', CONFIG.webhookSecret).update(`${timestamp}.${raw}`).digest('hex');\n  const a = Buffer.from(signature);\n  const b = Buffer.from(expected);\n  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) throw new Error('Webhook recusado: assinatura inválida');\n}\n\nconst body = JSON.parse(raw);\nif (body.event !== 'contact_updated') return [];\n\n// changed_attributes: [{ custom_attributes: { previous_value: {...}, current_value: {...} } }, ...]\nconst change = (body.changed_attributes || []).find(c => c.custom_attributes)?.custom_attributes;\nif (!change) return [];\nconst previous = change.previous_value?.[CONFIG.attributeKey] ?? null;\nconst stage = change.current_value?.[CONFIG.attributeKey] ?? null;\nif (!stage || stage === previous) return [];\n\nconst action = CONFIG.actions[stage];\nif (!action) return [];\n\nconst fill = text => String(text || '')\n  .replaceAll('{{nome}}', body.name || '')\n  .replaceAll('{{etapa}}', stage);\n\nreturn [{\n  json: {\n    chatwootUrl: CONFIG.chatwootUrl.replace(/\\/+$/, ''),\n    accountId: body.account?.id,\n    contactId: body.id,\n    contactName: body.name,\n    previousStage: previous,\n    stage,\n    message: action.message ? fill(action.message) : '',\n    note: action.note ? fill(action.note) : '',\n    labels: Array.isArray(action.labels) ? action.labels : []\n  }\n}];\n"
+      },
+      "name": "Detectar mudança de etapa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        220,
+        300
+      ],
+      "id": "detectar-mudança-de-etapa"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.chatwootUrl }}/api/v1/accounts/{{ $json.accountId }}/contacts/{{ $json.contactId }}/conversations",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Conversas do contato",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        440,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Chatwoot API"
+        }
+      },
+      "id": "conversas-do-contato"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Escolhe a conversa mais recente do contato (de preferência aberta) para enviar a mensagem\nconst base = $('Detectar mudança de etapa').first().json;\nconst conversations = ($input.first().json.payload || []).slice();\nconversations.sort((a, b) => (b.last_activity_at || 0) - (a.last_activity_at || 0));\nconst conversation = conversations.find(c => c.status === 'open') || conversations[0];\nreturn [{ json: { ...base, conversationId: conversation?.id ?? null } }];\n"
+      },
+      "name": "Escolher conversa",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        660,
+        300
+      ],
+      "id": "escolher-conversa"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "Tem mensagem?",
+              "leftValue": "={{ Boolean($json.message && $json.conversationId) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Tem mensagem?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        100
+      ],
+      "id": "tem-mensagem?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.chatwootUrl }}/api/v1/accounts/{{ $json.accountId }}/conversations/{{ $json.conversationId }}/messages",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: $json.message, message_type: \"outgoing\", private: false }) }}"
+      },
+      "name": "Enviar mensagem",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Chatwoot API"
+        }
+      },
+      "id": "enviar-mensagem"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "Tem nota?",
+              "leftValue": "={{ Boolean($json.note) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Tem nota?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        300
+      ],
+      "id": "tem-nota?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.chatwootUrl }}/api/v1/accounts/{{ $json.accountId }}/contacts/{{ $json.contactId }}/notes",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ content: $json.note }) }}"
+      },
+      "name": "Criar nota",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        300
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Chatwoot API"
+        }
+      },
+      "id": "criar-nota"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "Tem etiquetas?",
+              "leftValue": "={{ $json.labels.length > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "name": "Tem etiquetas?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        880,
+        500
+      ],
+      "id": "tem-etiquetas?"
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $json.chatwootUrl }}/api/v1/accounts/{{ $json.accountId }}/contacts/{{ $json.contactId }}/labels",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "name": "Etiquetas atuais",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1100,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Chatwoot API"
+        }
+      },
+      "id": "etiquetas-atuais"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Junta as etiquetas atuais do contato com as novas (o Chatwoot substitui a lista inteira)\nconst base = $('Escolher conversa').first().json;\nconst current = $input.first().json.payload || [];\nconst labels = [...new Set([...current, ...base.labels])];\nreturn [{ json: { ...base, labels, changed: labels.length !== current.length } }];\n"
+      },
+      "name": "Juntar etiquetas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        500
+      ],
+      "id": "juntar-etiquetas"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.chatwootUrl }}/api/v1/accounts/{{ $json.accountId }}/contacts/{{ $json.contactId }}/labels",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {},
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ labels: $json.labels }) }}"
+      },
+      "name": "Gravar etiquetas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1540,
+        500
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "",
+          "name": "Chatwoot API"
+        }
+      },
+      "id": "gravar-etiquetas"
+    }
+  ],
+  "connections": {
+    "Webhook do Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Detectar mudança de etapa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detectar mudança de etapa": {
+      "main": [
+        [
+          {
+            "node": "Conversas do contato",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Conversas do contato": {
+      "main": [
+        [
+          {
+            "node": "Escolher conversa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escolher conversa": {
+      "main": [
+        [
+          {
+            "node": "Tem mensagem?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tem nota?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tem etiquetas?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem mensagem?": {
+      "main": [
+        [
+          {
+            "node": "Enviar mensagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem nota?": {
+      "main": [
+        [
+          {
+            "node": "Criar nota",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tem etiquetas?": {
+      "main": [
+        [
+          {
+            "node": "Etiquetas atuais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Etiquetas atuais": {
+      "main": [
+        [
+          {
+            "node": "Juntar etiquetas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Juntar etiquetas": {
+      "main": [
+        [
+          {
+            "node": "Gravar etiquetas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
