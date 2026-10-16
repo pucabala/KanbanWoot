@@ -27,7 +27,6 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 
 - React (com Hooks)
 - Tailwind CSS
-- Axios
 - Chatwoot API
 - @hello-pangea/dnd
 
