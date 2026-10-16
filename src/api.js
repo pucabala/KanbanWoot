@@ -55,50 +55,26 @@ async function chatwootFetch(endpoint, options = {}) {
 
 debugLog('api.js: módulo carregado');
 
-// Retorna todos os contatos
-export async function getContacts() {
-  debugLog('api.js: getContacts chamado');
+// Coluna especial para contatos sem valor no atributo selecionado
+export const UNASSIGNED_STAGE = 'Não definido';
+
+// Retorna uma página dos contatos de uma coluna (valor do atributo), filtrando no servidor.
+// Para UNASSIGNED_STAGE, busca contatos sem valor no atributo.
+export async function getContactsByStage(attributeKey, stage, page = 1) {
+  debugLog('api.js: getContactsByStage chamado', attributeKey, stage, page);
+  const filter = stage === UNASSIGNED_STAGE
+    ? { attribute_key: attributeKey, filter_operator: 'is_not_present', values: [], query_operator: null }
+    : { attribute_key: attributeKey, filter_operator: 'equal_to', values: [stage], query_operator: null };
   try {
-    // A API do Chatwoot pagina /contacts; busca a 1ª página e depois as demais em paralelo
-    const MAX_PAGES = 1000; // trava de segurança
-    const CONCURRENCY = 5; // requisições simultâneas, para não sobrecarregar a API
-    const first = await chatwootFetch('/contacts?page=1');
-    const all = [...(first?.payload || [])];
-    const total = first?.meta?.count;
-    const pageSize = all.length;
-    if (!pageSize) return all;
-
-    if (typeof total !== 'number') {
-      // Sem meta.count: segue sequencialmente até uma página vazia
-      for (let page = 2; page <= MAX_PAGES; page++) {
-        const data = await chatwootFetch(`/contacts?page=${page}`);
-        const items = data?.payload || [];
-        if (!items.length) break;
-        all.push(...items);
-      }
-      return all;
-    }
-
-    const totalPages = Math.min(Math.ceil(total / pageSize), MAX_PAGES);
-    const pages = [];
-    for (let page = 2; page <= totalPages; page++) pages.push(page);
-    const results = new Array(pages.length);
-    let next = 0;
-    async function worker() {
-      while (next < pages.length) {
-        const i = next++;
-        const data = await chatwootFetch(`/contacts?page=${pages[i]}`);
-        results[i] = data?.payload || [];
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, pages.length) }, worker));
-    results.forEach(items => all.push(...items));
-
-    // Remove duplicados caso a lista mude durante a paginação
-    const seen = new Set();
-    return all.filter(c => (seen.has(c.id) ? false : seen.add(c.id)));
+    const data = await chatwootFetch(`/contacts/filter?page=${page}`, {
+      method: 'POST',
+      body: JSON.stringify({ payload: [filter] })
+    });
+    const contacts = data?.payload || [];
+    const count = typeof data?.meta?.count === 'number' ? data.meta.count : null;
+    return { contacts, count };
   } catch (error) {
-    debugLog('Erro ao buscar contatos:', error);
+    debugLog('Erro ao buscar contatos da coluna:', error);
     throw error;
   }
 }

@@ -1,8 +1,7 @@
 // KanbanBoard.jsx
 // Componente principal do Kanban dinâmico
-import React, { useEffect, useReducer, useState } from 'react';
+import React, { useState } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
-import { kanbanReducer } from '../reducers/kanbanReducer';
 import Notification from './Notification';
 import ErrorMessage from './ErrorMessage';
 import { useKanbanData } from '../hooks/useKanbanData';
@@ -10,65 +9,30 @@ import KanbanColumn from './KanbanColumn';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 function KanbanBoard() {
-  // Hook customizado para buscar contatos, colunas e atributo selecionado
-  const { contacts, columns, attribute, loading, error, updateContactAttribute, listAttributes, displayNames } = useKanbanData();
-  // Estado local para o board (colunas e cards)
-  const [board, dispatch] = useReducer(kanbanReducer, {});
+  // Colunas carregadas página a página, filtradas no servidor
+  const { board, columns, attribute, loading, error, listAttributes, displayNames, loadMore, moveContact } = useKanbanData();
   // Estado para notificações de erro/sucesso
   const [notification, setNotification] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Organiza os contatos nas colunas sempre que dados mudam
-  useEffect(() => {
-    if (!loading && contacts.length && columns.length) {
-      // Cria objeto com as colunas, incluindo "Não definido" para valores nulos
-      const organized = columns.reduce((acc, col) => {
-        acc[col] = [];
-        return acc;
-      }, { "Não definido": [] });
-      // Distribui contatos nas colunas conforme valor do atributo customizado
-      contacts.forEach(contact => {
-        const value = contact.custom_attributes?.[attribute.attribute_key] ?? "Não definido";
-        if (!organized[value]) organized[value] = [];
-        organized[value].push(contact);
-      });
-      // Atualiza o estado do board
-      dispatch({ type: 'INIT', payload: organized });
-    }
-  }, [contacts, columns, attribute, loading]);
-
   /**
    * Handler do drag-and-drop: move o card e atualiza o valor do atributo no backend
    */
-  const onDragEnd = async ({ source, destination }) => {
+  const onDragEnd = async ({ source, destination, draggableId }) => {
     if (!destination) return;
-    const sourceList = Array.from(board[source.droppableId]);
-    const [moved] = sourceList.splice(source.index, 1);
-    const destList = Array.from(board[destination.droppableId] || []);
-    destList.splice(destination.index, 0, moved);
-    const prevBoard = JSON.parse(JSON.stringify(board));
-    dispatch({
-      type: 'MOVE_CARD',
-      payload: {
+    const contact = board[source.droppableId]?.contacts[source.index];
+    if (!contact || String(contact.id) !== draggableId) return;
+    try {
+      await moveContact({
+        contactId: contact.id,
         source: source.droppableId,
         destination: destination.droppableId,
-        contact: moved
-      }
-    });
-    try {
-      // Atualiza o valor do atributo customizado do contato
-      let newValue;
-      if (destination.droppableId === "Não definido") {
-        // Para "Não definido", apaga a chave do atributo (remove do JSON)
-        newValue = undefined;
-      } else {
-        newValue = destination.droppableId;
-      }
-      await updateContactAttribute(moved.id, attribute.attribute_key, newValue);
+        sourceIndex: source.index,
+        destinationIndex: destination.index
+      });
     } catch (err) {
       setNotification({ type: 'error', message: `Erro ao atualizar estágio: ${err?.message || err}` });
-      dispatch({ type: 'INIT', payload: prevBoard });
       console.error('[KanbanBoard] Falha ao atualizar estágio:', err);
     }
   };
@@ -108,15 +72,16 @@ function KanbanBoard() {
           ))}
         </select>
       </div>
-  
+
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="flex gap-6 overflow-x-auto">
-          {/* Renderiza cada coluna do Kanban, incluindo "Não definido" na frente */}
-          {["Não definido", ...columns].map(col => (
+          {/* Renderiza cada coluna do Kanban, com "Não definido" na frente */}
+          {columns.map(col => (
             <KanbanColumn
               key={col}
               stage={col}
-              contacts={board[col] || []}
+              column={board[col]}
+              onLoadMore={() => loadMore(col)}
               attrDisplayNames={displayNames}
             />
           ))}

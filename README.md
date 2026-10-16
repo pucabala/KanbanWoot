@@ -6,7 +6,7 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 
 ## 🚀 Funcionalidades
 
-- 📥 Carrega todos os contatos do Chatwoot (não apenas os que têm atributo kanban)
+- 📥 Cada coluna busca só os seus contatos no Chatwoot (filtro no servidor), carregando mais ao rolar
 - 🔄 Estágios/colunas definidos dinamicamente pelos valores cadastrados em qualquer campo customizado do tipo lista
 - 🧲 Interface com drag and drop usando `@hello-pangea/dnd`
 - ⚡ Atualização em tempo real com API REST do Chatwoot
@@ -15,7 +15,7 @@ Interface web estilo Kanban integrada ao **Chatwoot**, utilizando campos persona
 - 🗂️ Coluna especial "Não definido" para contatos sem valor definido no atributo
 - 📝 Exibição dos nomes amigáveis dos atributos e valores (display_name)
 - 🖱️ Atualização do estágio do contato ao arrastar (remove a chave do atributo ao mover para "Não definido")
-- 🔄 Board recarrega automaticamente após qualquer atualização
+- 🔄 Movimentação otimista: o card muda de coluna na hora e volta se a API recusar
 - 🧩 Código modular e otimizado (hooks, memoização, sem requisições duplicadas)
 - 🏷️ Exibição de todos os atributos customizados do contato (com nomes amigáveis)
 - 🛠️ Responsividade e acessibilidade aprimoradas
@@ -140,7 +140,7 @@ docker run -d -p 3000:3000 \
 
 Os nomes antigos (`REACT_APP_CHATWOOT_URL`, `REACT_APP_CHATWOOT_ACCOUNT_ID`, `REACT_APP_CHATWOOT_TOKEN`) continuam aceitos.
 
-O proxy libera apenas o que o KanbanWoot usa: listar contatos, listar definições de atributos, atualizar um contato e remover atributos de um contato. Qualquer outra rota ou método em `/chatwoot-api/` responde `403`.
+O proxy libera apenas o que o KanbanWoot usa: filtrar contatos por coluna, listar definições de atributos, atualizar um contato e remover atributos de um contato. Qualquer outra rota ou método em `/chatwoot-api/` responde `403`.
 
 > ⚠️ **O KanbanWoot não tem login próprio.** Quem acessar a URL dele pode ver e alterar contatos usando o token configurado. Publique-o só em uma rede ou domínio restrito, ou coloque autenticação na frente (ex.: no proxy reverso do Easypanel). Prefira o token de um usuário com permissões mínimas.
 
