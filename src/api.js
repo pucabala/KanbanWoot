@@ -13,6 +13,30 @@ const ACCOUNT_ID = env.REACT_APP_CHATWOOT_ACCOUNT_ID;
 // Dias na mesma etapa até o card ser marcado como parado (metade disso: atenção)
 export const STALE_DAYS = Number(process.env.REACT_APP_STALE_DAYS || runtimeEnv.REACT_APP_STALE_DAYS) || 7;
 
+// Etapas finais: ao mover para uma delas, o KanbanWoot pede o motivo (obrigatório na perda)
+const splitList = value => String(value || '').split(',').map(v => v.trim()).filter(Boolean);
+const configList = (name, fallback) => {
+  const list = splitList(process.env[`REACT_APP_${name}`] || runtimeEnv[`REACT_APP_${name}`]);
+  return list.length ? list : fallback;
+};
+const WON_STAGES = configList('WON_STAGES', ['Ganho', 'Ganhou', 'Vendido', 'Fechado', 'Fechado ganho', 'Won']);
+const LOST_STAGES = configList('LOST_STAGES', ['Perdido', 'Perdeu', 'Fechado perdido', 'Cancelado', 'Lost']);
+// Motivos sugeridos na perda (o agente também pode escrever outro)
+export const LOST_REASONS = configList('LOST_REASONS', []);
+
+const normalize = text => String(text).trim().toLocaleLowerCase('pt-BR');
+// 'won', 'lost' ou null
+export function stageOutcome(stage) {
+  const name = normalize(stage);
+  if (LOST_STAGES.some(s => normalize(s) === name)) return 'lost';
+  if (WON_STAGES.some(s => normalize(s) === name)) return 'won';
+  return null;
+}
+
+// Atributo com o motivo do ganho/perda (ex.: kbw_funil_motivo)
+export const STAGE_REASON_SUFFIX = '_motivo';
+export const stageReasonKey = attributeKey => `${attributeKey}${STAGE_REASON_SUFFIX}`;
+
 // Sufixo do atributo que guarda quando o contato entrou na etapa atual (ex.: kbw_funil_desde)
 export const STAGE_SINCE_SUFFIX = '_desde';
 export const stageSinceKey = attributeKey => `${attributeKey}${STAGE_SINCE_SUFFIX}`;
@@ -32,6 +56,16 @@ const SESSION_HEADER_KEYS = ['access-token', 'token-type', 'client', 'expiry', '
 
 // Endereço da tela de login do Chatwoot (modo sessão: mesmo domínio)
 export const CHATWOOT_LOGIN_URL = '/app/login';
+
+// Origem pública do Chatwoot (para conferir mensagens do Painel de Aplicativos no modo proxy)
+export const CHATWOOT_PUBLIC_ORIGIN = (() => {
+  try {
+    const url = process.env.REACT_APP_CHATWOOT_URL || runtimeEnv.REACT_APP_CHATWOOT_PUBLIC_URL;
+    return url ? new URL(url).origin : null;
+  } catch {
+    return null;
+  }
+})();
 
 // Link para o contato no painel do Chatwoot (null se a URL pública do Chatwoot não for conhecida)
 export function getChatwootContactUrl(contactId) {

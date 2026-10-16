@@ -15,7 +15,7 @@ import { UNASSIGNED_STAGE } from '../api';
  *  attrDisplayNames?: Record<string, string>
  * }} props
  */
-export default function KanbanColumn({ stage, column, onLoadMore, onMoveCard, stages, attributeKey, attrDisplayNames }) {
+export default function KanbanColumn({ stage, column, onLoadMore, onMoveCard, stages, attributeKey, highlightId, attrDisplayNames }) {
   const contacts = column?.contacts || [];
   const scrollRef = useRef(null);
   const sentinelRef = useRef(null);
@@ -61,6 +61,7 @@ export default function KanbanColumn({ stage, column, onLoadMore, onMoveCard, st
                 stage={stage}
                 stages={stages}
                 attributeKey={attributeKey}
+                highlighted={highlightId != null && contact.id === highlightId}
                 onMove={onMoveCard ? destination => onMoveCard(contact, index, destination) : undefined}
                 attrDisplayNames={attrDisplayNames}
               />

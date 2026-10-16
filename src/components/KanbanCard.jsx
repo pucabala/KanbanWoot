@@ -1,8 +1,8 @@
 // KanbanCard.jsx
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Draggable } from '@hello-pangea/dnd';
 import CustomAttributesList from './CustomAttributesList';
-import { getChatwootContactUrl, stageSinceKey, STALE_DAYS, UNASSIGNED_STAGE } from '../api';
+import { getChatwootContactUrl, stageSinceKey, stageReasonKey, stageOutcome, STALE_DAYS, UNASSIGNED_STAGE } from '../api';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -25,6 +25,18 @@ function StageAge({ days }) {
   return <span className={`text-xs px-1.5 py-0.5 rounded ${color}`} title={title}>{label}</span>;
 }
 
+// Selo de ganho/perda com o motivo
+function OutcomeBadge({ outcome, reason }) {
+  if (!outcome) return null;
+  const won = outcome === 'won';
+  return (
+    <div className={`mt-2 text-xs px-2 py-1 rounded ${won ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+      <span className="font-semibold">{won ? '✓ Ganho' : '✗ Perdido'}</span>
+      {reason && <span>: {reason}</span>}
+    </div>
+  );
+}
+
 /**
  * @param {{
  *  contact: { id: number | string, name: string, email?: string, custom_attributes?: object },
@@ -33,27 +45,38 @@ function StageAge({ days }) {
  *  stages: string[],
  *  attributeKey: string,
  *  onMove: (destination: string) => void,
+ *  highlighted?: boolean,
  *  attrDisplayNames?: Record<string, string>
  * }} props
  */
-export default function KanbanCard({ contact, index, stage, stages = [], attributeKey, onMove, attrDisplayNames = {} }) {
+export default function KanbanCard({ contact, index, stage, stages = [], attributeKey, onMove, highlighted = false, attrDisplayNames = {} }) {
   // Suporte para thumbnail e telefone
   const thumbnail = contact.thumbnail || contact.avatar_url || contact.profile_picture_url;
   const phone = contact.phone_number || contact.telefone || contact.mobile;
   const contactUrl = getChatwootContactUrl(contact.id);
   const days = stage === UNASSIGNED_STAGE ? null : daysInStage(contact, attributeKey);
-  const isStale = days !== null && days >= STALE_DAYS;
+  const outcome = stage === UNASSIGNED_STAGE ? null : stageOutcome(stage);
+  // Em etapa final o card não "envelhece"
+  const isStale = !outcome && days !== null && days >= STALE_DAYS;
+  const reason = contact.custom_attributes?.[stageReasonKey(attributeKey)];
+
+  // Rola até o card do contato da conversa aberta no Chatwoot
+  const elementRef = useRef(null);
+  useEffect(() => {
+    if (highlighted) elementRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+  }, [highlighted]);
 
   return (
     <Draggable draggableId={String(contact.id)} index={index}>
       {(provided, snapshot) => (
         <div
-          ref={provided.innerRef}
+          ref={el => { provided.innerRef(el); elementRef.current = el; }}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           className={`bg-gray-100 p-3 rounded shadow cursor-pointer select-none border-l-4 ${
             isStale ? 'border-red-400' : 'border-transparent'
-          } ${snapshot.isDragging ? 'bg-blue-200 shadow-lg' : ''}`}
+          } ${highlighted ? 'ring-2 ring-blue-500' : ''} ${snapshot.isDragging ? 'bg-blue-200 shadow-lg' : ''}`}
+          aria-current={highlighted ? 'true' : undefined}
         >
           <div className="flex items-center gap-2">
             {thumbnail && (
@@ -65,7 +88,7 @@ export default function KanbanCard({ contact, index, stage, stages = [], attribu
               />
             )}
             <div className="font-medium flex-grow min-w-0 truncate">{contact.name}</div>
-            <StageAge days={days} />
+            {!outcome && <StageAge days={days} />}
             {contactUrl && (
               <a
                 href={contactUrl}
@@ -87,6 +110,7 @@ export default function KanbanCard({ contact, index, stage, stages = [], attribu
             {contact.email && phone && <span className="mx-2">·</span>}
             {contact.email && <span>{contact.email}</span>}
           </div>
+          <OutcomeBadge outcome={outcome} reason={reason} />
           {/* Mostra atributos customizados usando componente separado */}
           {contact.custom_attributes && (
             <CustomAttributesList attributes={contact.custom_attributes} displayNames={attrDisplayNames} />

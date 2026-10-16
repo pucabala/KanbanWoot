@@ -59,7 +59,7 @@ export function kanbanReducer(state, action) {
       if (!original) return state;
       const customAttributes = { ...(original.custom_attributes || {}) };
       Object.entries(attributes).forEach(([key, value]) => {
-        if (typeof value === 'undefined') delete customAttributes[key];
+        if (typeof value === 'undefined' || value === null) delete customAttributes[key];
         else customAttributes[key] = value;
       });
       const contact = { ...original, custom_attributes: customAttributes };
